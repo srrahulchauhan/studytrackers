@@ -21,6 +21,7 @@ export function MobileNav({
   setActivePage,
   isMobileMenuOpen,
   setIsMobileMenuOpen,
+  onBackToHub,
 }) {
   const { activePreparation, notifications, sessions, settings } = useStudy();
   const { isRunning, isBreak } = useTimer();

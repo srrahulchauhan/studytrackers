@@ -26,6 +26,7 @@ export function Header({
   onOpenSearch,
   onOpenQuickAction,
   setActivePage,
+  onBackToHub,
 }) {
   const navigate = useNavigate();
   const {
