@@ -10,6 +10,9 @@ import {
   ChevronRight,
   Play,
   Layers,
+  CheckCircle,
+  FileText,
+  Trophy,
 } from 'lucide-react';
 import { useStudy } from '../context/StudyContext';
 import { useTimer } from '../context/TimerContext';
@@ -17,6 +20,7 @@ import { StatusBadge, PriorityBadge } from '../components/common/Badge';
 import { ProgressBar } from '../components/common/ProgressBar';
 import { SubjectModal } from '../components/subjects/SubjectModal';
 import { ConfirmDialog } from '../components/common/ConfirmDialog';
+import { CompletionNoteModal } from '../components/common/CompletionNoteModal';
 import { formatSecondsToShort, formatHoursToShort } from '../utils/timerUtils';
 import { formatFriendlyDate, getTodayDateString } from '../utils/dateUtils';
 
@@ -29,6 +33,9 @@ export function SubjectsPage({ setActivePage, setSelectedSubjectId = null }) {
     timetable,
     activePrepId,
     deleteSubject,
+    completeSubject,
+    reopenSubject,
+    updateSubjectNote,
   } = useStudy();
 
   const { startStudy } = useTimer();
@@ -38,6 +45,20 @@ export function SubjectsPage({ setActivePage, setSelectedSubjectId = null }) {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingSubject, setEditingSubject] = useState(null);
   const [deleteTargetId, setDeleteTargetId] = useState(null);
+
+  // Completion Note Modal state
+  const [completeTargetSubject, setCompleteTargetSubject] = useState(null);
+  const [isNoteEditOnly, setIsNoteEditOnly] = useState(false);
+
+  const handleConfirmSubjectCompletion = (note) => {
+    if (!completeTargetSubject) return;
+    if (isNoteEditOnly) {
+      updateSubjectNote(completeTargetSubject.id, note);
+    } else {
+      completeSubject(completeTargetSubject.id, note);
+    }
+    setCompleteTargetSubject(null);
+  };
 
   const todayStr = getTodayDateString();
 
@@ -246,6 +267,36 @@ export function SubjectsPage({ setActivePage, setSelectedSubjectId = null }) {
                     </span>
                   </div>
                 </div>
+
+                {/* Final Status Note Display for Completed Subject */}
+                {sub.status === 'Completed' && (
+                  <div className="mt-4 p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-xs">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-1.5 font-bold text-emerald-700 dark:text-emerald-300 uppercase tracking-wider text-[10px]">
+                          <Trophy size={12} />
+                          <span>Final Status Note</span>
+                          {sub.completedAt && (
+                            <span className="font-normal text-slate-400 lowercase">• {formatFriendlyDate(sub.completedAt.slice(0, 10))}</span>
+                          )}
+                        </div>
+                        <p className="mt-1 text-slate-700 dark:text-slate-200 font-medium italic leading-relaxed">
+                          "{sub.completionNote || 'Subject completed successfully.'}"
+                        </p>
+                      </div>
+                      <button
+                        onClick={() => {
+                          setCompleteTargetSubject(sub);
+                          setIsNoteEditOnly(true);
+                        }}
+                        className="p-1 rounded-lg text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/20 transition shrink-0"
+                        title="Edit Final Status Note"
+                      >
+                        <Edit2 size={13} />
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Bottom Card Action Footer */}
@@ -278,6 +329,42 @@ export function SubjectsPage({ setActivePage, setSelectedSubjectId = null }) {
                     <Play size={12} className="fill-white" />
                     <span>Study</span>
                   </button>
+
+                  {/* Complete / Reopen / Edit Note buttons */}
+                  {sub.status !== 'Completed' ? (
+                    <button
+                      onClick={() => {
+                        setCompleteTargetSubject(sub);
+                        setIsNoteEditOnly(false);
+                      }}
+                      className="px-2.5 py-1.5 text-xs font-semibold rounded-lg bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/60 dark:hover:bg-emerald-900/80 text-emerald-700 dark:text-emerald-300 flex items-center gap-1 transition border border-emerald-200/50 dark:border-emerald-800/30"
+                      title="Mark Subject as Completed & Add Final Status Note"
+                    >
+                      <CheckCircle size={13} />
+                      <span>Complete</span>
+                    </button>
+                  ) : (
+                    <div className="flex items-center gap-1">
+                      <button
+                        onClick={() => {
+                          setCompleteTargetSubject(sub);
+                          setIsNoteEditOnly(true);
+                        }}
+                        className="px-2 py-1 text-xs font-semibold rounded-lg text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/60 hover:bg-emerald-100 dark:hover:bg-emerald-900 transition flex items-center gap-1"
+                        title="Edit Final Status Note"
+                      >
+                        <FileText size={12} />
+                        <span>Note</span>
+                      </button>
+                      <button
+                        onClick={() => reopenSubject(sub.id)}
+                        className="px-2 py-1 text-xs font-medium rounded-lg text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition"
+                        title="Reopen Subject"
+                      >
+                        Reopen
+                      </button>
+                    </div>
+                  )}
                 </div>
 
                 <div className="flex items-center gap-1">
@@ -329,6 +416,17 @@ export function SubjectsPage({ setActivePage, setSelectedSubjectId = null }) {
         message="Deleting this subject will remove all associated topics and timetable slots."
         confirmText="Yes, Delete"
         isDestructive={true}
+      />
+
+      {/* Final Status Note Modal for Subject */}
+      <CompletionNoteModal
+        isOpen={!!completeTargetSubject}
+        onClose={() => setCompleteTargetSubject(null)}
+        onConfirm={handleConfirmSubjectCompletion}
+        itemType="subject"
+        itemName={completeTargetSubject?.name || ''}
+        initialNote={completeTargetSubject?.completionNote || ''}
+        isEditOnly={isNoteEditOnly}
       />
     </div>
   );

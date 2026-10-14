@@ -12,12 +12,14 @@ import {
   CheckCircle,
   Square,
   BookOpen,
+  FileText,
 } from 'lucide-react';
 import { useStudy } from '../context/StudyContext';
 import { useTimer } from '../context/TimerContext';
 import { StatusBadge, PriorityBadge } from '../components/common/Badge';
 import { TopicModal } from '../components/topics/TopicModal';
 import { ConfirmDialog } from '../components/common/ConfirmDialog';
+import { CompletionNoteModal } from '../components/common/CompletionNoteModal';
 import { formatFriendlyDate, getTodayDateString, formatTimeString } from '../utils/dateUtils';
 import { formatMinutesToShort } from '../utils/timerUtils';
 
@@ -27,6 +29,7 @@ export function TopicsPage({ setActivePage, selectedSubjectId = null }) {
     subjects,
     preparations,
     setTopicStatus,
+    updateTopicNote,
     deleteTopic,
     addSession,
     settings,
@@ -49,6 +52,52 @@ export function TopicsPage({ setActivePage, selectedSubjectId = null }) {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingTopic, setEditingTopic] = useState(null);
   const [deleteTargetId, setDeleteTargetId] = useState(null);
+
+  // Final Status Note Modal state
+  const [completeTargetTopic, setCompleteTargetTopic] = useState(null);
+  const [isNoteEditOnly, setIsNoteEditOnly] = useState(false);
+
+  const handleConfirmTopicCompletion = (note) => {
+    if (!completeTargetTopic) return;
+    if (isNoteEditOnly) {
+      updateTopicNote(completeTargetTopic.id, note);
+      setCompleteTargetTopic(null);
+      return;
+    }
+
+    if (session?.topicId === completeTargetTopic.id) {
+      completeTopicAndStop(note);
+    } else {
+      setTopicStatus(completeTargetTopic.id, 'Completed', note);
+      const sub = subjects.find((s) => s.id === completeTargetTopic.subjectId);
+      const studyMinutes = completeTargetTopic.estimatedStudyTime || 0;
+      if (studyMinutes > 0) {
+        const now = new Date();
+        const startTime = new Date(now.getTime() - studyMinutes * 60 * 1000);
+        addSession({
+          date: getTodayDateString(),
+          preparationId: sub?.preparationId,
+          subjectId: completeTargetTopic.subjectId,
+          topicId: completeTargetTopic.id,
+          startTime: formatTimeString(
+            startTime.toTimeString().slice(0, 5),
+            settings?.timeFormat !== '24h'
+          ),
+          endTime: formatTimeString(
+            now.toTimeString().slice(0, 5),
+            settings?.timeFormat !== '24h'
+          ),
+          totalDuration: studyMinutes * 60,
+          breakDuration: 0,
+          actualStudyDuration: studyMinutes * 60,
+          breaks: [],
+          status: 'Completed',
+          notes: note || 'Topic completed',
+        });
+      }
+    }
+    setCompleteTargetTopic(null);
+  };
 
   // Filter topics
   const filteredTopics = topics.filter((t) => {
@@ -215,6 +264,36 @@ export function TopicsPage({ setActivePage, selectedSubjectId = null }) {
                         </div>
                       )}
                     </div>
+
+                    {/* Final Status Note Display for Completed Topic */}
+                    {top.status === 'Completed' && (
+                      <div className="mt-3 p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-xs">
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-1.5 font-bold text-emerald-700 dark:text-emerald-300 uppercase tracking-wider text-[10px]">
+                              <FileText size={12} />
+                              <span>Final Status Note</span>
+                              {top.completedAt && (
+                                <span className="font-normal text-slate-400 lowercase">• {formatFriendlyDate(top.completedAt.slice(0, 10))}</span>
+                              )}
+                            </div>
+                            <p className="mt-1 text-slate-700 dark:text-slate-200 font-medium italic">
+                              "{top.completionNote || 'Topic marked as completed.'}"
+                            </p>
+                          </div>
+                          <button
+                            onClick={() => {
+                              setCompleteTargetTopic(top);
+                              setIsNoteEditOnly(true);
+                            }}
+                            className="p-1 rounded-lg text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/20 transition shrink-0"
+                            title="Edit Final Status Note"
+                          >
+                            <Edit2 size={13} />
+                          </button>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
 
@@ -279,45 +358,36 @@ export function TopicsPage({ setActivePage, selectedSubjectId = null }) {
                   {top.status !== 'Completed' ? (
                     <button
                       onClick={() => {
-                        if (session?.topicId === top.id) {
-                          completeTopicAndStop();
-                        } else {
-                          setTopicStatus(top.id, 'Completed');
-                          const studyMinutes = top.estimatedStudyTime || 0;
-                          if (studyMinutes > 0) {
-                            const now = new Date();
-                            const startTime = new Date(now.getTime() - studyMinutes * 60 * 1000);
-                            addSession({
-                              date: getTodayDateString(),
-                              preparationId: sub?.preparationId,
-                              subjectId: top.subjectId,
-                              topicId: top.id,
-                              startTime: formatTimeString(startTime.toTimeString().slice(0, 5), settings?.timeFormat !== '24h'),
-                              endTime: formatTimeString(now.toTimeString().slice(0, 5), settings?.timeFormat !== '24h'),
-                              totalDuration: studyMinutes * 60,
-                              breakDuration: 0,
-                              actualStudyDuration: studyMinutes * 60,
-                              breaks: [],
-                              status: 'Completed',
-                              notes: 'Directly marked as completed',
-                            });
-                          }
-                        }
+                        setCompleteTargetTopic(top);
+                        setIsNoteEditOnly(false);
                       }}
                       className="px-3 py-1.5 text-xs font-bold rounded-lg bg-brand-50 hover:bg-brand-100 dark:bg-brand-950 dark:hover:bg-brand-900 text-brand-600 dark:text-brand-300 flex items-center gap-1 transition"
-                      title="Mark Topic as Completed"
+                      title="Mark Topic as Completed & Add Final Status Note"
                     >
                       <CheckCircle size={13} />
                       <span>COMPLETE</span>
                     </button>
                   ) : (
-                    <button
-                      onClick={() => setTopicStatus(top.id, 'In Progress')}
-                      className="px-2.5 py-1 text-xs font-medium rounded-lg text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition"
-                      title="Reopen topic"
-                    >
-                      Reopen
-                    </button>
+                    <div className="flex items-center gap-1">
+                      <button
+                        onClick={() => {
+                          setCompleteTargetTopic(top);
+                          setIsNoteEditOnly(true);
+                        }}
+                        className="px-2.5 py-1 text-xs font-semibold rounded-lg text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/60 hover:bg-emerald-100 dark:hover:bg-emerald-900 transition flex items-center gap-1"
+                        title="Edit Final Status Note"
+                      >
+                        <FileText size={12} />
+                        <span>Note</span>
+                      </button>
+                      <button
+                        onClick={() => setTopicStatus(top.id, 'In Progress')}
+                        className="px-2 py-1 text-xs font-medium rounded-lg text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition"
+                        title="Reopen topic"
+                      >
+                        Reopen
+                      </button>
+                    </div>
                   )}
 
                   {/* Edit / Delete */}
@@ -372,6 +442,17 @@ export function TopicsPage({ setActivePage, selectedSubjectId = null }) {
         message="Are you sure you want to remove this topic?"
         confirmText="Yes, Delete"
         isDestructive={true}
+      />
+
+      {/* Final Status Note Modal */}
+      <CompletionNoteModal
+        isOpen={!!completeTargetTopic}
+        onClose={() => setCompleteTargetTopic(null)}
+        onConfirm={handleConfirmTopicCompletion}
+        itemType="topic"
+        itemName={completeTargetTopic?.name || ''}
+        initialNote={completeTargetTopic?.completionNote || ''}
+        isEditOnly={isNoteEditOnly}
       />
     </div>
   );

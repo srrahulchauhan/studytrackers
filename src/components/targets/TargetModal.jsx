@@ -6,6 +6,7 @@ export function TomorrowTargetModal({ isOpen, onClose }) {
   const { preparations, subjects, topics, activePrepId, addTomorrowTarget } = useStudy();
 
   const [formData, setFormData] = useState({
+    title: '',
     preparationId: activePrepId || '',
     subjectId: '',
     topicId: '',
@@ -28,11 +29,25 @@ export function TomorrowTargetModal({ isOpen, onClose }) {
     <Modal
       isOpen={isOpen}
       onClose={onClose}
-      title="Plan Tomorrow's Target"
-      subtitle="Prepare tomorrow's study schedule in advance"
+      title="Plan Study Task & Target"
+      subtitle="Schedule tomorrow's study tasks & sprint targets"
       maxWidth="max-w-md"
     >
       <form onSubmit={handleSubmit} className="space-y-4">
+        {/* Task Title */}
+        <div>
+          <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1.5">
+            Task / Target Title (Optional)
+          </label>
+          <input
+            type="text"
+            value={formData.title}
+            onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+            placeholder="e.g., Solve 25 Calculus Questions, Review Chapter 3"
+            className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-dark-950 text-sm text-slate-900 dark:text-white focus:border-brand-500 outline-none"
+          />
+        </div>
+
         <div>
           <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1.5">
             Preparation

@@ -823,24 +823,45 @@ export function DashboardPage({
                   const prep = preparations.find(
                     (p) => p.id === tar.preparationId,
                   );
+                  const isTaskDone = tar.completed || tar.status === 'Completed';
+
                   return (
                     <div
                       key={tar.id}
-                      className="p-2.5 rounded-xl bg-slate-50 dark:bg-dark-950/60 border border-slate-200/80 dark:border-slate-800 flex items-center justify-between text-xs"
+                      className={`p-2.5 rounded-xl border flex flex-col gap-1 text-xs transition ${
+                        isTaskDone
+                          ? 'bg-emerald-500/5 dark:bg-emerald-950/20 border-emerald-500/30'
+                          : 'bg-slate-50 dark:bg-dark-950/60 border-slate-200/80 dark:border-slate-800'
+                      }`}
                     >
-                      <div>
-                        <span className="font-bold text-slate-800 dark:text-slate-200 block">
-                          {sub?.name || prep?.name || "General Target"}
-                        </span>
-                        <span className="text-slate-500 dark:text-slate-400">
-                          {top?.name ||
-                            (sub?.name
-                              ? "General Subject Study"
-                              : "General Study Session")}{" "}
-                          • {tar.targetDurationMinutes} mins
-                        </span>
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="min-w-0 flex-1">
+                          <span className={`font-bold block truncate ${isTaskDone ? 'line-through text-slate-400' : 'text-slate-800 dark:text-slate-200'}`}>
+                            {tar.title || sub?.name || prep?.name || "General Target"}
+                          </span>
+                          <span className="text-[11px] text-slate-500 dark:text-slate-400">
+                            {top?.name ||
+                              (sub?.name
+                                ? "General Subject Study"
+                                : "General Study Session")}{" "}
+                            • {tar.targetDurationMinutes} mins
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          {isTaskDone ? (
+                            <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">
+                              Done
+                            </span>
+                          ) : (
+                            <PriorityBadge priority={tar.priority} />
+                          )}
+                        </div>
                       </div>
-                      <PriorityBadge priority={tar.priority} />
+                      {isTaskDone && tar.completionNote && (
+                        <p className="text-[11px] text-emerald-700 dark:text-emerald-300 italic truncate border-t border-emerald-500/10 pt-1">
+                          📝 "{tar.completionNote}"
+                        </p>
+                      )}
                     </div>
                   );
                 })}

@@ -6,13 +6,16 @@ import {
   Calendar,
   Clock,
   CheckCircle2,
+  CheckCircle,
   TrendingUp,
   Edit2,
+  FileText,
 } from 'lucide-react';
 import { useStudy } from '../context/StudyContext';
 import { ProgressBar } from '../components/common/ProgressBar';
 import { PriorityBadge } from '../components/common/Badge';
 import { TomorrowTargetModal } from '../components/targets/TargetModal';
+import { CompletionNoteModal } from '../components/common/CompletionNoteModal';
 import {
   getTodayDateString,
   getTomorrowDateString,
@@ -28,6 +31,9 @@ export function TargetsPage() {
     updateDailyTarget,
     updateWeeklyTarget,
     updateMonthlyTarget,
+    completeTomorrowTarget,
+    reopenTomorrowTarget,
+    updateTomorrowTargetNote,
     removeTomorrowTarget,
     subjects,
     preparations,
@@ -39,6 +45,20 @@ export function TargetsPage() {
   const [isTomorrowModalOpen, setIsTomorrowModalOpen] = useState(false);
   const [editingDaily, setEditingDaily] = useState(false);
   const [dailyTargetHours, setDailyTargetHours] = useState(targets.daily?.targetHours || 4);
+
+  // Final Status Note Modal for Task Completion
+  const [completeTargetTask, setCompleteTargetTask] = useState(null);
+  const [isNoteEditOnly, setIsNoteEditOnly] = useState(false);
+
+  const handleConfirmTaskCompletion = (note) => {
+    if (!completeTargetTask) return;
+    if (isNoteEditOnly) {
+      updateTomorrowTargetNote(completeTargetTask.id, note);
+    } else {
+      completeTomorrowTarget(completeTargetTask.id, note);
+    }
+    setCompleteTargetTask(null);
+  };
 
   const todayStr = getTodayDateString();
   const tomorrowStr = getTomorrowDateString();
@@ -203,16 +223,16 @@ export function TargetsPage() {
           </div>
         </div>
 
-        {/* Section 12: TOMORROW'S TARGET */}
+        {/* Section 12: PLANNED TASKS & TARGETS */}
         <div className="glass-card p-6 flex flex-col justify-between">
           <div>
             <div className="flex items-center justify-between pb-3 mb-4 border-b border-slate-100 dark:border-slate-800">
               <div>
                 <h3 className="text-base font-bold text-slate-900 dark:text-white">
-                  Tomorrow's Target
+                  Planned Tasks & Targets
                 </h3>
                 <p className="text-xs text-slate-500 dark:text-slate-400">
-                  Plan ahead for: {formatFriendlyDate(tomorrowStr)}
+                  Target sprint for: {formatFriendlyDate(tomorrowStr)}
                 </p>
               </div>
 
@@ -221,46 +241,126 @@ export function TargetsPage() {
                 className="px-3 py-1.5 rounded-xl bg-brand-600 hover:bg-brand-700 text-white text-xs font-semibold flex items-center gap-1 shadow-sm transition"
               >
                 <Plus size={14} />
-                <span>Add Target</span>
+                <span>Add Task / Target</span>
               </button>
             </div>
 
             {(!targets.tomorrow || targets.tomorrow.length === 0) ? (
               <div className="py-12 text-center text-slate-400 text-xs">
-                No targets planned for tomorrow yet. Click "+ Add Target" to schedule tomorrow's sprint.
+                No planned tasks or targets yet. Click "+ Add Task / Target" to schedule your sprint.
               </div>
             ) : (
-              <div className="space-y-2.5">
+              <div className="space-y-3">
                 {targets.tomorrow.map((tar) => {
                   const sub = subjects.find((s) => s.id === tar.subjectId);
                   const prep = preparations.find((p) => p.id === tar.preparationId);
                   const top = topics.find((t) => t.id === tar.topicId);
+                  const isTaskDone = tar.completed || tar.status === 'Completed';
 
                   return (
                     <div
                       key={tar.id}
-                      className="p-3.5 rounded-xl bg-slate-50 dark:bg-dark-950/60 border border-slate-200/80 dark:border-slate-800 flex items-center justify-between gap-3"
+                      className={`p-3.5 rounded-xl border transition-all ${
+                        isTaskDone
+                          ? 'bg-emerald-500/5 dark:bg-emerald-950/20 border-emerald-500/30'
+                          : 'bg-slate-50 dark:bg-dark-950/60 border-slate-200/80 dark:border-slate-800'
+                      }`}
                     >
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <span className="font-bold text-sm text-slate-900 dark:text-white">
-                            {sub?.name || prep?.name || 'General Target'}
-                          </span>
-                          <PriorityBadge priority={tar.priority} />
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2">
+                            <span className={`font-bold text-sm ${isTaskDone ? 'line-through text-slate-500 dark:text-slate-400' : 'text-slate-900 dark:text-white'}`}>
+                              {tar.title || sub?.name || prep?.name || 'General Task'}
+                            </span>
+                            <PriorityBadge priority={tar.priority} />
+                            {isTaskDone && (
+                              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">
+                                Completed
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                            {tar.title && (sub?.name || top?.name) ? `${sub?.name || ''}${top?.name ? ' • ' + top.name : ''} • ` : ''}
+                            {tar.targetDurationMinutes} mins
+                            {tar.startTime && ` • Starts ${tar.startTime}`}
+                          </p>
                         </div>
-                        <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                          {top?.name || (sub?.name ? 'General Subject Study' : 'General Study Session')} • {tar.targetDurationMinutes} mins
-                          {tar.startTime && ` • Starts ${tar.startTime}`}
-                        </p>
+
+                        {/* Task Action Buttons */}
+                        <div className="flex items-center gap-1 shrink-0">
+                          {!isTaskDone ? (
+                            <button
+                              onClick={() => {
+                                setCompleteTargetTask(tar);
+                                setIsNoteEditOnly(false);
+                              }}
+                              className="px-2.5 py-1 text-xs font-semibold rounded-lg bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950 dark:hover:bg-emerald-900 text-emerald-700 dark:text-emerald-300 flex items-center gap-1 transition border border-emerald-200/50 dark:border-emerald-800/40"
+                              title="Mark Task as Completed & Add Final Status Note"
+                            >
+                              <CheckCircle size={13} />
+                              <span>Complete</span>
+                            </button>
+                          ) : (
+                            <div className="flex items-center gap-1">
+                              <button
+                                onClick={() => {
+                                  setCompleteTargetTask(tar);
+                                  setIsNoteEditOnly(true);
+                                }}
+                                className="px-2 py-1 text-xs font-semibold rounded-lg text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/60 hover:bg-emerald-100 dark:hover:bg-emerald-900 transition flex items-center gap-1"
+                                title="Edit Final Status Note"
+                              >
+                                <FileText size={12} />
+                                <span>Note</span>
+                              </button>
+                              <button
+                                onClick={() => reopenTomorrowTarget(tar.id)}
+                                className="px-2 py-1 text-xs font-medium rounded-lg text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition"
+                                title="Reopen Task"
+                              >
+                                Reopen
+                              </button>
+                            </div>
+                          )}
+
+                          <button
+                            onClick={() => removeTomorrowTarget(tar.id)}
+                            className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition"
+                            title="Remove task"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </div>
                       </div>
 
-                      <button
-                        onClick={() => removeTomorrowTarget(tar.id)}
-                        className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition"
-                        title="Remove tomorrow target"
-                      >
-                        <Trash2 size={14} />
-                      </button>
+                      {/* Final Status Note Display for Completed Task */}
+                      {isTaskDone && (
+                        <div className="mt-2.5 p-2.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-xs">
+                          <div className="flex items-start justify-between gap-1">
+                            <div className="min-w-0">
+                              <span className="font-bold text-emerald-700 dark:text-emerald-300 flex items-center gap-1 text-[10px] uppercase tracking-wider">
+                                <FileText size={11} /> Final Status Note
+                                {tar.completedAt && (
+                                  <span className="font-normal text-slate-400 lowercase">• {formatFriendlyDate(tar.completedAt.slice(0, 10))}</span>
+                                )}
+                              </span>
+                              <p className="text-slate-700 dark:text-slate-300 italic mt-0.5 leading-relaxed">
+                                "{tar.completionNote || 'Task completed successfully.'}"
+                              </p>
+                            </div>
+                            <button
+                              onClick={() => {
+                                setCompleteTargetTask(tar);
+                                setIsNoteEditOnly(true);
+                              }}
+                              className="p-1 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/20 rounded transition shrink-0"
+                              title="Edit Final Status Note"
+                            >
+                              <Edit2 size={12} />
+                            </button>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   );
                 })}
@@ -364,6 +464,17 @@ export function TargetsPage() {
       <TomorrowTargetModal
         isOpen={isTomorrowModalOpen}
         onClose={() => setIsTomorrowModalOpen(false)}
+      />
+
+      {/* Final Status Note Modal for Task Completion */}
+      <CompletionNoteModal
+        isOpen={!!completeTargetTask}
+        onClose={() => setCompleteTargetTask(null)}
+        onConfirm={handleConfirmTaskCompletion}
+        itemType="task"
+        itemName={completeTargetTask?.title || 'Study Task'}
+        initialNote={completeTargetTask?.completionNote || ''}
+        isEditOnly={isNoteEditOnly}
       />
     </div>
   );

@@ -30,6 +30,7 @@ export function SubjectModal({ isOpen, onClose, initialData = null }) {
     totalTargetHours: 40,
     dailyTargetHours: 1.5,
     status: 'In Progress',
+    completionNote: '',
     color: '#0284c7',
     icon: 'BookOpen',
     videoLinks: '',
@@ -41,6 +42,7 @@ export function SubjectModal({ isOpen, onClose, initialData = null }) {
     if (initialData) {
       setFormData({
         ...initialData,
+        completionNote: initialData.completionNote || '',
         videoLinks: Array.isArray(initialData.videoLinks) ? initialData.videoLinks.join('\n') : (initialData.videoLinks || ''),
       });
     } else {
@@ -54,6 +56,7 @@ export function SubjectModal({ isOpen, onClose, initialData = null }) {
         totalTargetHours: 40,
         dailyTargetHours: 1.5,
         status: 'In Progress',
+        completionNote: '',
         color: '#0284c7',
         icon: 'BookOpen',
         videoLinks: '',
@@ -276,6 +279,22 @@ export function SubjectModal({ isOpen, onClose, initialData = null }) {
             </select>
           </div>
         </div>
+
+        {/* Final Status Note when Subject is Completed */}
+        {formData.status === 'Completed' && (
+          <div className="p-3.5 rounded-xl border border-emerald-500/30 bg-emerald-50/50 dark:bg-emerald-950/20 space-y-1.5 animate-fade-in">
+            <label className="block text-xs font-bold text-emerald-700 dark:text-emerald-300 uppercase tracking-wider">
+              🏆 Final Status Note / Subject Completion Summary
+            </label>
+            <textarea
+              rows={2}
+              value={formData.completionNote || ''}
+              onChange={(e) => setFormData({ ...formData, completionNote: e.target.value })}
+              placeholder="e.g., Completed all syllabus modules, covered PYQs, scored 90%+ in mock test..."
+              className="w-full px-3 py-2 rounded-lg border border-emerald-200 dark:border-emerald-800 bg-white dark:bg-dark-950 text-xs text-slate-900 dark:text-white placeholder:text-slate-400 focus:border-emerald-500 outline-none leading-relaxed"
+            />
+          </div>
+        )}
 
         {/* Color Accent Picker */}
         <div>

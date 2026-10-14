@@ -73,6 +73,8 @@ export function exportStudyDataToExcel({
     'Daily Target Hours': sub.dailyTargetHours || 0,
     Priority: sub.priority || 'Medium',
     Status: sub.status || 'In Progress',
+    'Final Status Note': sub.completionNote || '',
+    'Completed At': sub.completedAt || '',
   }));
 
   // Sheet 4: Topics
@@ -84,9 +86,25 @@ export function exportStudyDataToExcel({
     'Target Date': top.targetDate || '',
     'Estimated Minutes': top.estimatedStudyTime || 0,
     Status: top.status || 'Pending',
+    'Final Status Note': top.completionNote || '',
+    'Completed At': top.completedAt || '',
   }));
 
-  // Sheet 5: Timetable
+  // Sheet 5: Planned Tasks & Targets
+  const tasksData = (targets.tomorrow || []).map((tar) => ({
+    'Task Title': tar.title || 'Study Task',
+    Preparation: prepMap[tar.preparationId] || 'General',
+    Subject: subMap[tar.subjectId] || 'General',
+    Topic: topicMap[tar.topicId] || 'General',
+    'Duration (Mins)': tar.targetDurationMinutes || 60,
+    'Start Time': tar.startTime || '',
+    Priority: tar.priority || 'Medium',
+    Status: tar.completed || tar.status === 'Completed' ? 'Completed' : 'Pending',
+    'Final Status Note': tar.completionNote || '',
+    'Completed At': tar.completedAt || '',
+  }));
+
+  // Sheet 6: Timetable
   const timetableData = timetable.map((tt) => ({
     Day: tt.day,
     'Start Time': tt.startTime,
@@ -176,6 +194,7 @@ export function exportStudyDataToExcel({
   addSheet(attendanceData, 'Attendance');
   addSheet(subjectsData, 'Subjects');
   addSheet(topicsData, 'Topics');
+  addSheet(tasksData, 'Planned Tasks');
   addSheet(timetableData, 'Timetable');
   addSheet(dailyTargetRows, 'Daily Targets');
   addSheet(weeklyTargetRows, 'Weekly Targets');
