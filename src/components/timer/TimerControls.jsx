@@ -8,9 +8,12 @@ import {
   RotateCcw,
 } from 'lucide-react';
 import { useTimer } from '../../context/TimerContext';
+import { useStudy } from '../../context/StudyContext';
 import { ConfirmDialog } from '../common/ConfirmDialog';
+import { CompletionNoteModal } from '../common/CompletionNoteModal';
 
 export function TimerControls({ onStartNewSession = null }) {
+  const { topics } = useStudy();
   const {
     session,
     isRunning,
@@ -27,8 +30,10 @@ export function TimerControls({ onStartNewSession = null }) {
   } = useTimer();
 
   const [isStopConfirmOpen, setIsStopConfirmOpen] = useState(false);
-  const [isCompleteConfirmOpen, setIsCompleteConfirmOpen] = useState(false);
+  const [isCompleteModalOpen, setIsCompleteModalOpen] = useState(false);
   const [isResetConfirmOpen, setIsResetConfirmOpen] = useState(false);
+
+  const activeTopic = topics.find((t) => t.id === session.topicId);
 
   if (isIdle) {
     return (
@@ -112,7 +117,7 @@ export function TimerControls({ onStartNewSession = null }) {
         {/* COMPLETE TOPIC BUTTON */}
         {session.topicId && (
           <button
-            onClick={() => setIsCompleteConfirmOpen(true)}
+            onClick={() => setIsCompleteModalOpen(true)}
             className="py-3 px-6 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-semibold text-sm flex items-center gap-2 shadow-md shadow-emerald-600/20 transition transform active:scale-98"
           >
             <CheckCircle size={17} />
@@ -141,14 +146,13 @@ export function TimerControls({ onStartNewSession = null }) {
         isDestructive={false}
       />
 
-      <ConfirmDialog
-        isOpen={isCompleteConfirmOpen}
-        onClose={() => setIsCompleteConfirmOpen(false)}
-        onConfirm={() => completeTopicAndStop()}
-        title="Complete Topic and End Session?"
-        message="This will mark the current topic as 'Completed', record the study session in your history, and update your subject progress!"
-        confirmText="Complete & Celebrate 🎉"
-        isDestructive={false}
+      {/* Final Status Note Modal for Topic Completion */}
+      <CompletionNoteModal
+        isOpen={isCompleteModalOpen}
+        onClose={() => setIsCompleteModalOpen(false)}
+        onConfirm={(completionNote) => completeTopicAndStop(completionNote)}
+        itemType="topic"
+        itemName={activeTopic?.name || 'Current Topic'}
       />
 
       <ConfirmDialog

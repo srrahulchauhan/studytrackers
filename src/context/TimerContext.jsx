@@ -296,7 +296,7 @@ export function TimerProvider({ children }) {
   // Complete topic and stop session
   const completeTopicAndStop = (extraNotes = '') => {
     if (session.topicId) {
-      setTopicStatus(session.topicId, 'Completed');
+      setTopicStatus(session.topicId, 'Completed', extraNotes);
     }
 
     try {

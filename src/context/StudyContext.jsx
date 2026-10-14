@@ -336,6 +336,49 @@ export function StudyProvider({ children }) {
     addToast("Subject deleted", "info");
   };
 
+  const completeSubject = (id, completionNote = "") => {
+    setSubjects((prev) =>
+      prev.map((s) =>
+        s.id === id
+          ? {
+              ...s,
+              status: "Completed",
+              completionNote,
+              completedAt: new Date().toISOString(),
+              updatedAt: new Date().toISOString(),
+            }
+          : s,
+      ),
+    );
+    addToast("Subject completed! 🏆", "success");
+  };
+
+  const reopenSubject = (id) => {
+    setSubjects((prev) =>
+      prev.map((s) =>
+        s.id === id
+          ? {
+              ...s,
+              status: "In Progress",
+              updatedAt: new Date().toISOString(),
+            }
+          : s,
+      ),
+    );
+    addToast("Subject reopened to In Progress", "info");
+  };
+
+  const updateSubjectNote = (id, completionNote) => {
+    setSubjects((prev) =>
+      prev.map((s) =>
+        s.id === id
+          ? { ...s, completionNote, updatedAt: new Date().toISOString() }
+          : s,
+      ),
+    );
+    addToast("Subject final status note updated!", "success");
+  };
+
   // ----------------------------------------------------
   // TOPICS CRUD
   // ----------------------------------------------------
@@ -364,13 +407,40 @@ export function StudyProvider({ children }) {
     addToast("Topic updated", "success");
   };
 
-  const setTopicStatus = (id, status) => {
+  const setTopicStatus = (id, status, completionNote = null) => {
     setTopics((prev) =>
-      prev.map((t) =>
-        t.id === id ? { ...t, status, updatedAt: new Date().toISOString() } : t,
-      ),
+      prev.map((t) => {
+        if (t.id !== id) return t;
+        const updated = {
+          ...t,
+          status,
+          updatedAt: new Date().toISOString(),
+        };
+        if (completionNote !== null && completionNote !== undefined) {
+          updated.completionNote = completionNote;
+        }
+        if (status === "Completed") {
+          if (!updated.completedAt) updated.completedAt = new Date().toISOString();
+        }
+        return updated;
+      }),
     );
     addToast(`Topic marked as ${status}`, "info");
+  };
+
+  const completeTopic = (id, completionNote = "") => {
+    setTopicStatus(id, "Completed", completionNote);
+  };
+
+  const updateTopicNote = (id, completionNote) => {
+    setTopics((prev) =>
+      prev.map((t) =>
+        t.id === id
+          ? { ...t, completionNote, updatedAt: new Date().toISOString() }
+          : t,
+      ),
+    );
+    addToast("Topic final status note updated!", "success");
   };
 
   const deleteTopic = (id) => {
@@ -563,13 +633,76 @@ export function StudyProvider({ children }) {
       ...targetItem,
       id: targetItem.id || `ttar-${Date.now()}`,
       userId,
+      completed: false,
+      status: targetItem.status || "Pending",
+      completionNote: targetItem.completionNote || "",
       createdAt: new Date().toISOString(),
     };
     setTargets((prev) => ({
       ...prev,
       tomorrow: [...(prev.tomorrow || []), item],
     }));
-    addToast("Tomorrow target added", "success");
+    addToast("Target added", "success");
+  };
+
+  const updateTomorrowTarget = (id, updatedFields) => {
+    setTargets((prev) => ({
+      ...prev,
+      tomorrow: (prev.tomorrow || []).map((t) =>
+        t.id === id
+          ? { ...t, ...updatedFields, updatedAt: new Date().toISOString() }
+          : t,
+      ),
+    }));
+    addToast("Target updated", "success");
+  };
+
+  const completeTomorrowTarget = (id, completionNote = "") => {
+    setTargets((prev) => ({
+      ...prev,
+      tomorrow: (prev.tomorrow || []).map((t) =>
+        t.id === id
+          ? {
+              ...t,
+              completed: true,
+              status: "Completed",
+              completionNote,
+              completedAt: new Date().toISOString(),
+              updatedAt: new Date().toISOString(),
+            }
+          : t,
+      ),
+    }));
+    addToast("Task completed! 🎉", "success");
+  };
+
+  const reopenTomorrowTarget = (id) => {
+    setTargets((prev) => ({
+      ...prev,
+      tomorrow: (prev.tomorrow || []).map((t) =>
+        t.id === id
+          ? {
+              ...t,
+              completed: false,
+              status: "Pending",
+              updatedAt: new Date().toISOString(),
+            }
+          : t,
+      ),
+    }));
+    addToast("Task reopened", "info");
+  };
+
+  const updateTomorrowTargetNote = (id, completionNote) => {
+    setTargets((prev) => ({
+      ...prev,
+      tomorrow: (prev.tomorrow || []).map((t) =>
+        t.id === id
+          ? { ...t, completionNote, updatedAt: new Date().toISOString() }
+          : t,
+      ),
+    }));
+    addToast("Task status note updated!", "success");
   };
 
   const removeTomorrowTarget = (id) => {
@@ -577,7 +710,7 @@ export function StudyProvider({ children }) {
       ...prev,
       tomorrow: (prev.tomorrow || []).filter((t) => t.id !== id),
     }));
-    addToast("Tomorrow target removed", "info");
+    addToast("Target removed", "info");
   };
 
   // ----------------------------------------------------
@@ -753,11 +886,16 @@ export function StudyProvider({ children }) {
     addSubject,
     updateSubject,
     deleteSubject,
+    completeSubject,
+    reopenSubject,
+    updateSubjectNote,
 
     topics,
     addTopic,
     updateTopic,
     setTopicStatus,
+    completeTopic,
+    updateTopicNote,
     deleteTopic,
 
     timetable,
@@ -780,6 +918,10 @@ export function StudyProvider({ children }) {
     updateWeeklyTarget,
     updateMonthlyTarget,
     addTomorrowTarget,
+    updateTomorrowTarget,
+    completeTomorrowTarget,
+    reopenTomorrowTarget,
+    updateTomorrowTargetNote,
     removeTomorrowTarget,
 
     goals,
