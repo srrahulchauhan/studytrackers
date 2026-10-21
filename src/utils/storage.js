@@ -1,16 +1,17 @@
 // LocalStorage management helper with defaults, auto-initialization, and backup/restore
 
 import {
-  initialPreparations,
-  initialSubjects,
-  initialTopics,
-  initialTimetable,
-  initialStudySessions,
+  freshTargets,
   initialAttendance,
   initialGoals,
-  initialTargets,
-  initialSettings,
   initialNotifications,
+  initialPreparations,
+  initialSettings,
+  initialStudySessions,
+  initialSubjects,
+  initialTargets,
+  initialTimetable,
+  initialTopics,
   initialVideoCourses,
 } from './sampleData';
 
@@ -72,12 +73,12 @@ export function removeStoredItem(key) {
 }
 
 /**
- * Initialize storage with clean data if first time
+ * Initialize storage with fresh empty data if first time
  */
 export function initializeStorage(force = false) {
-  // Ensure the app initializes with the reference dashboard data
-  const isCleaned = localStorage.getItem('studyflow_mockup_v1');
-  if (!isCleaned) {
+  // Ensure existing browser sessions clear old sample data to a completely fresh slate
+  const isFresh = localStorage.getItem('studyflow_fresh_v6');
+  if (!isFresh) {
     localStorage.removeItem(STORAGE_KEYS.PREPARATIONS);
     localStorage.removeItem(STORAGE_KEYS.SUBJECTS);
     localStorage.removeItem(STORAGE_KEYS.TOPICS);
@@ -87,35 +88,36 @@ export function initializeStorage(force = false) {
     localStorage.removeItem(STORAGE_KEYS.GOALS);
     localStorage.removeItem(STORAGE_KEYS.TARGETS);
     localStorage.removeItem(STORAGE_KEYS.NOTIFICATIONS);
+    localStorage.removeItem(STORAGE_KEYS.VIDEO_COURSES);
     localStorage.removeItem(STORAGE_KEYS.ACTIVE_PREP_ID);
     localStorage.removeItem(STORAGE_KEYS.ACTIVE_SESSION);
     localStorage.removeItem('studyflow_initialized');
-    localStorage.setItem('studyflow_mockup_v1', 'true');
+    localStorage.setItem('studyflow_fresh_v6', 'true');
     force = true;
   }
 
   const isInitialized = localStorage.getItem('studyflow_initialized');
 
   if (force || !isInitialized) {
-    setStoredItem(STORAGE_KEYS.PREPARATIONS, initialPreparations);
-    setStoredItem(STORAGE_KEYS.SUBJECTS, initialSubjects);
-    setStoredItem(STORAGE_KEYS.TOPICS, initialTopics);
-    setStoredItem(STORAGE_KEYS.TIMETABLE, initialTimetable);
-    setStoredItem(STORAGE_KEYS.SESSIONS, initialStudySessions);
-    setStoredItem(STORAGE_KEYS.ATTENDANCE, initialAttendance);
-    setStoredItem(STORAGE_KEYS.GOALS, initialGoals);
-    setStoredItem(STORAGE_KEYS.TARGETS, initialTargets);
+    setStoredItem(STORAGE_KEYS.PREPARATIONS, []);
+    setStoredItem(STORAGE_KEYS.SUBJECTS, []);
+    setStoredItem(STORAGE_KEYS.TOPICS, []);
+    setStoredItem(STORAGE_KEYS.TIMETABLE, []);
+    setStoredItem(STORAGE_KEYS.SESSIONS, []);
+    setStoredItem(STORAGE_KEYS.ATTENDANCE, []);
+    setStoredItem(STORAGE_KEYS.GOALS, []);
+    setStoredItem(STORAGE_KEYS.TARGETS, freshTargets);
     setStoredItem(STORAGE_KEYS.SETTINGS, initialSettings);
-    setStoredItem(STORAGE_KEYS.NOTIFICATIONS, initialNotifications);
-    setStoredItem(STORAGE_KEYS.VIDEO_COURSES, initialVideoCourses);
-    setStoredItem(STORAGE_KEYS.ACTIVE_PREP_ID, 'prep-1');
+    setStoredItem(STORAGE_KEYS.NOTIFICATIONS, []);
+    setStoredItem(STORAGE_KEYS.VIDEO_COURSES, []);
+    setStoredItem(STORAGE_KEYS.ACTIVE_PREP_ID, '');
     localStorage.setItem('studyflow_initialized', 'true');
-  } else {
-    // If initialized previously but VIDEO_COURSES is missing, backfill it
-    if (!localStorage.getItem(STORAGE_KEYS.VIDEO_COURSES)) {
-      setStoredItem(STORAGE_KEYS.VIDEO_COURSES, initialVideoCourses);
-    }
   }
+}
+
+// Automatically ensure clean storage on load before components mount
+if (typeof window !== 'undefined' && typeof localStorage !== 'undefined') {
+  initializeStorage();
 }
 
 /**
@@ -123,7 +125,7 @@ export function initializeStorage(force = false) {
  */
 export function clearAllDataToFresh() {
   localStorage.setItem('studyflow_initialized', 'true');
-  localStorage.setItem('studyflow_clean_v3', 'true');
+  localStorage.setItem('studyflow_fresh_v6', 'true');
 
   setStoredItem(STORAGE_KEYS.PREPARATIONS, []);
   setStoredItem(STORAGE_KEYS.ACTIVE_PREP_ID, '');
@@ -133,12 +135,7 @@ export function clearAllDataToFresh() {
   setStoredItem(STORAGE_KEYS.SESSIONS, []);
   setStoredItem(STORAGE_KEYS.ATTENDANCE, []);
   setStoredItem(STORAGE_KEYS.GOALS, []);
-  setStoredItem(STORAGE_KEYS.TARGETS, {
-    daily: { targetHours: 4, subjectDistribution: [] },
-    weekly: { targetHours: 25, dailyPlan: {} },
-    monthly: { targetHours: 100 },
-    tomorrow: [],
-  });
+  setStoredItem(STORAGE_KEYS.TARGETS, freshTargets);
   setStoredItem(STORAGE_KEYS.NOTIFICATIONS, []);
   setStoredItem(STORAGE_KEYS.VIDEO_COURSES, []);
   removeStoredItem(STORAGE_KEYS.ACTIVE_SESSION);
@@ -218,7 +215,20 @@ export function importAllDataFromJSON(jsonString) {
  */
 export function resetToSampleData() {
   localStorage.clear();
-  initializeStorage();
+  setStoredItem(STORAGE_KEYS.PREPARATIONS, initialPreparations);
+  setStoredItem(STORAGE_KEYS.SUBJECTS, initialSubjects);
+  setStoredItem(STORAGE_KEYS.TOPICS, initialTopics);
+  setStoredItem(STORAGE_KEYS.TIMETABLE, initialTimetable);
+  setStoredItem(STORAGE_KEYS.SESSIONS, initialStudySessions);
+  setStoredItem(STORAGE_KEYS.ATTENDANCE, initialAttendance);
+  setStoredItem(STORAGE_KEYS.GOALS, initialGoals);
+  setStoredItem(STORAGE_KEYS.TARGETS, initialTargets);
+  setStoredItem(STORAGE_KEYS.SETTINGS, initialSettings);
+  setStoredItem(STORAGE_KEYS.NOTIFICATIONS, initialNotifications);
+  setStoredItem(STORAGE_KEYS.VIDEO_COURSES, initialVideoCourses);
+  setStoredItem(STORAGE_KEYS.ACTIVE_PREP_ID, 'prep-1');
+  localStorage.setItem('studyflow_initialized', 'true');
+  localStorage.setItem('studyflow_fresh_v5', 'true');
 }
 
 export { STORAGE_KEYS };

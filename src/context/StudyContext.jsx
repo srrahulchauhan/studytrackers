@@ -4,6 +4,7 @@ import { getTodayDateString } from "../utils/dateUtils";
 import { syncToGoogleSheets } from "../utils/googleSheetsSync";
 import { exportTodosToExcel } from "../utils/exportExcel";
 import {
+  freshTargets,
   initialAttendance,
   initialGoals,
   initialNotifications,
@@ -37,7 +38,7 @@ export function StudyProvider({ children }) {
 
   // Preparations
   const [preparations, setPreparations] = useState(() =>
-    getStoredItem(STORAGE_KEYS.PREPARATIONS, initialPreparations),
+    getStoredItem(STORAGE_KEYS.PREPARATIONS, []),
   );
   const [activePrepId, setActivePrepId] = useState(() =>
     getStoredItem(STORAGE_KEYS.ACTIVE_PREP_ID, ""),
@@ -45,35 +46,35 @@ export function StudyProvider({ children }) {
 
   // Subjects & Topics
   const [subjects, setSubjects] = useState(() =>
-    getStoredItem(STORAGE_KEYS.SUBJECTS, initialSubjects),
+    getStoredItem(STORAGE_KEYS.SUBJECTS, []),
   );
   const [topics, setTopics] = useState(() =>
-    getStoredItem(STORAGE_KEYS.TOPICS, initialTopics),
+    getStoredItem(STORAGE_KEYS.TOPICS, []),
   );
 
   // Timetable
   const [timetable, setTimetable] = useState(() =>
-    getStoredItem(STORAGE_KEYS.TIMETABLE, initialTimetable),
+    getStoredItem(STORAGE_KEYS.TIMETABLE, []),
   );
 
   // Study Sessions
   const [sessions, setSessions] = useState(() =>
-    getStoredItem(STORAGE_KEYS.SESSIONS, initialStudySessions),
+    getStoredItem(STORAGE_KEYS.SESSIONS, []),
   );
 
   // Attendance
   const [attendance, setAttendance] = useState(() =>
-    getStoredItem(STORAGE_KEYS.ATTENDANCE, initialAttendance),
+    getStoredItem(STORAGE_KEYS.ATTENDANCE, []),
   );
 
   // Goals
   const [goals, setGoals] = useState(() =>
-    getStoredItem(STORAGE_KEYS.GOALS, initialGoals),
+    getStoredItem(STORAGE_KEYS.GOALS, []),
   );
 
   // Targets
   const [targets, setTargets] = useState(() =>
-    getStoredItem(STORAGE_KEYS.TARGETS, initialTargets),
+    getStoredItem(STORAGE_KEYS.TARGETS, freshTargets),
   );
 
   // Settings
@@ -83,12 +84,12 @@ export function StudyProvider({ children }) {
 
   // Notifications
   const [notifications, setNotifications] = useState(() =>
-    getStoredItem(STORAGE_KEYS.NOTIFICATIONS, initialNotifications),
+    getStoredItem(STORAGE_KEYS.NOTIFICATIONS, []),
   );
 
   // Video Courses
   const [videoCourses, setVideoCourses] = useState(() =>
-    getStoredItem(STORAGE_KEYS.VIDEO_COURSES, initialVideoCourses),
+    getStoredItem(STORAGE_KEYS.VIDEO_COURSES, []),
   );
 
   // In-app Toasts
@@ -903,16 +904,9 @@ export function StudyProvider({ children }) {
     setSessions([]);
     setAttendance([]);
     setGoals([]);
-    setTargets({
-      daily: {
-        targetHours: settings?.dailyTargetHours || 4,
-        subjectDistribution: [],
-      },
-      weekly: { targetHours: 25 },
-      monthly: { targetHours: 100 },
-      tomorrow: [],
-    });
+    setTargets(freshTargets);
     setNotifications([]);
+    setVideoCourses([]);
     addToast(
       "All data cleared! Workspace reset to a clean slate.",
       "success",
@@ -923,7 +917,7 @@ export function StudyProvider({ children }) {
   const resetToSampleData = () => {
     resetStorageToSample();
     setPreparations(initialPreparations);
-    setActivePrepId("");
+    setActivePrepId("prep-1");
     setSubjects(initialSubjects);
     setTopics(initialTopics);
     setTimetable(initialTimetable);
@@ -933,6 +927,7 @@ export function StudyProvider({ children }) {
     setTargets(initialTargets);
     setSettings(initialSettings);
     setNotifications(initialNotifications);
+    setVideoCourses(initialVideoCourses);
     addToast("Workspace reset to factory clean defaults!", "info");
   };
 

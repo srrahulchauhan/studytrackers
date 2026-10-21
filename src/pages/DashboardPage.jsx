@@ -26,11 +26,20 @@ import {
   Sparkles,
   Flame,
   ArrowUpRight,
+  Trash2,
+  RotateCcw,
 } from 'lucide-react';
 import { useStudy } from '../context/StudyContext';
 import { useTimer } from '../context/TimerContext';
 import { formatSecondsToShort, formatHoursToShort } from '../utils/timerUtils';
-import { getTodayDateString, formatFriendlyDate } from '../utils/dateUtils';
+import {
+  getTodayDateString,
+  getTomorrowDateString,
+  formatFriendlyDate,
+  formatFullDate,
+  getCurrentWeekDates,
+} from '../utils/dateUtils';
+import { ConfirmDialog } from '../components/common/ConfirmDialog';
 
 export function DashboardPage({
   setActivePage,
@@ -49,6 +58,12 @@ export function DashboardPage({
     targets,
     goals,
     settings,
+    notifications,
+    toggleTomorrowTarget,
+    removeTomorrowTarget,
+    deleteSession,
+    clearAllNotifications,
+    clearAllData,
   } = useStudy();
 
   const {
@@ -58,88 +73,97 @@ export function DashboardPage({
     startStudy,
   } = useTimer();
 
+  const [isClearModalOpen, setIsClearModalOpen] = useState(false);
+
   const todayStr = getTodayDateString();
-
-  // Interactive to-do items matching exact screenshot
-  const [todoItems, setTodoItems] = useState([
-    {
-      id: 'td-1',
-      title: 'JavaScript – Functions',
-      time: '10:00 AM',
-      tag: 'Study',
-      tagColor: 'bg-blue-50 text-blue-600 dark:bg-blue-950/60 dark:text-blue-300',
-      completed: true,
-      subjectId: 'sub-js',
-      topicId: 'top-1',
-    },
-    {
-      id: 'td-2',
-      title: 'React – Components',
-      time: '12:00 PM',
-      tag: 'Study',
-      tagColor: 'bg-blue-50 text-blue-600 dark:bg-blue-950/60 dark:text-blue-300',
-      completed: false,
-      subjectId: 'sub-react',
-      topicId: 'top-2',
-    },
-    {
-      id: 'td-3',
-      title: 'Node.js – Basics',
-      time: '04:00 PM',
-      tag: 'Practice',
-      tagColor: 'bg-amber-50 text-amber-600 dark:bg-amber-950/60 dark:text-amber-300',
-      completed: false,
-      subjectId: 'sub-node',
-      topicId: 'top-3',
-    },
-    {
-      id: 'td-4',
-      title: 'Make Notes – Database',
-      time: '07:00 PM',
-      tag: 'Notes',
-      tagColor: 'bg-purple-50 text-purple-600 dark:bg-purple-950/60 dark:text-purple-300',
-      completed: false,
-      subjectId: 'sub-db',
-      topicId: 'top-4',
-    },
-  ]);
-
-  const toggleTodo = (id) => {
-    setTodoItems((prev) =>
-      prev.map((item) => (item.id === id ? { ...item, completed: !item.completed } : item))
-    );
-  };
+  const weekDates = getCurrentWeekDates();
+  const currentMonth = todayStr.slice(0, 7);
+  const currentMonthName = new Date().toLocaleString('en-US', { month: 'short' }).toUpperCase();
 
   const activeLiveStudySeconds = isRunning ? Math.round((liveTimings?.netStudyMs || 0) / 1000) : 0;
 
-  // 1. Metrics calculations matching the user's reference screenshot (12h 45m total, 2h 15m today, 14h 30m weekly, 48h 20m monthly)
+  // Real Today's Study Sessions
   const todaySessions = sessions.filter((s) => s.date === todayStr);
-  const rawTodayStudySeconds = todaySessions.reduce((acc, s) => acc + (s.actualStudyDuration || 0), 0) + activeLiveStudySeconds;
+  const todayStudySeconds = todaySessions.reduce((acc, s) => acc + (s.actualStudyDuration || 0), 0) + activeLiveStudySeconds;
   const todayBreakSeconds = todaySessions.reduce((acc, s) => acc + (s.breakDuration || 0), 0);
 
-  // If initial demo state, match screenshot numbers (Today: 2h 15m = 8100s, Planned: 4h, Completed 60%)
-  const todayStudySeconds = rawTodayStudySeconds > 0 ? rawTodayStudySeconds : 8100;
+  // Real Total Study Seconds
+  const displayTotalSeconds = sessions.reduce((acc, s) => acc + (s.actualStudyDuration || 0), 0) + activeLiveStudySeconds;
+
+  // Real Weekly Study Seconds
+  const displayWeeklySeconds = sessions
+    .filter((s) => weekDates.some((day) => day.dateStr === s.date))
+    .reduce((acc, s) => acc + (s.actualStudyDuration || 0), 0) + activeLiveStudySeconds;
+
+  // Real Monthly Study Seconds
+  const displayMonthlySeconds = sessions
+    .filter((s) => s.date && s.date.startsWith(currentMonth))
+    .reduce((acc, s) => acc + (s.actualStudyDuration || 0), 0) + activeLiveStudySeconds;
+
+  // Planned & Target Hours
   const todayPlannedHours = targets.daily?.targetHours || settings?.dailyTargetHours || 4;
-  const todayRemainingHours = Math.max(0, todayPlannedHours - todayStudySeconds / 3600);
-  const todayProgressPercent = 60; // 60% in reference screenshot
-
-  // Total Study Seconds (12h 45m = 45900s)
-  const rawTotalSeconds = sessions.reduce((acc, s) => acc + (s.actualStudyDuration || 0), 0) + activeLiveStudySeconds;
-  const displayTotalSeconds = rawTotalSeconds > 0 ? rawTotalSeconds : 45900;
-
-  // Weekly Study Seconds (14h 30m = 52200s)
-  const displayWeeklySeconds = 52200;
   const weeklyTargetHours = targets.weekly?.targetHours || 25;
-  const weeklyProgressPercent = 58;
+  const monthlyTargetHours = targets.monthly?.targetHours || 100;
 
-  // Monthly Study Seconds (48h 20m)
-  const displayMonthlyHours = '48h 20m';
-  const monthlyProgressPercent = 48;
+  const todayProgressPercent = todayPlannedHours > 0
+    ? Math.min(100, Math.round((todayStudySeconds / 3600 / todayPlannedHours) * 100))
+    : 0;
+  const weeklyProgressPercent = weeklyTargetHours > 0
+    ? Math.min(100, Math.round((displayWeeklySeconds / 3600 / weeklyTargetHours) * 100))
+    : 0;
+  const monthlyProgressPercent = monthlyTargetHours > 0
+    ? Math.min(100, Math.round((displayMonthlySeconds / 3600 / monthlyTargetHours) * 100))
+    : 0;
+
+  const todayRemainingHours = Math.max(0, todayPlannedHours - todayStudySeconds / 3600);
+
+  // Topics
+  const completedTopics = topics.filter((t) => t.status === 'Completed' || t.completed).length;
+  const pendingTopics = Math.max(0, topics.length - completedTopics);
+  const topicProgressPercent = topics.length > 0 ? Math.round((completedTopics / topics.length) * 100) : 0;
 
   // Attendance
   const minAttendanceMinutes = settings?.minAttendanceMinutes || 30;
-  const isPresent = false; // "ABSENT" in reference screenshot
-  const attendanceLoggedMinutes = 0;
+  const attendanceLoggedMinutes = Math.floor(todayStudySeconds / 60);
+  const isPresent = attendanceLoggedMinutes >= minAttendanceMinutes;
+  const attendanceProgressPercent = minAttendanceMinutes > 0
+    ? Math.min(100, Math.round((todayStudySeconds / (minAttendanceMinutes * 60)) * 100))
+    : 0;
+
+  // Total Target Hours from subjects
+  const totalTargetHours = subjects.reduce((sum, s) => sum + (Number(s.totalTargetHours) || 0), 0);
+  const totalProgressPercent = totalTargetHours > 0
+    ? Math.min(100, Math.round((displayTotalSeconds / 3600 / totalTargetHours) * 100))
+    : 0;
+
+  // Goals
+  const activeGoal = goals.find((g) => g.status === 'In Progress' || g.status === 'Active') || goals[0];
+  const goalProgressPercent = activeGoal ? (activeGoal.progress || 0) : 0;
+
+  // Dynamic Todo Items from targets.tomorrow || []
+  const todoItems = targets.tomorrow || [];
+
+  // Weekly Activity Chart Data
+  const weekChartData = weekDates.map((day) => {
+    const daySessions = sessions.filter((s) => s.date === day.dateStr);
+    let daySec = daySessions.reduce((acc, s) => acc + (s.actualStudyDuration || 0), 0);
+    if (day.dateStr === todayStr) {
+      daySec += activeLiveStudySeconds;
+    }
+    const h = Number((daySec / 3600).toFixed(1));
+    return {
+      day: day.dayName.slice(0, 3),
+      date: day.dateStr,
+      h,
+      seconds: daySec,
+      isToday: day.dateStr === todayStr,
+    };
+  });
+  const maxChartHours = Math.max(4, ...weekChartData.map((d) => d.h));
+
+  // Dynamic Greeting
+  const currentHour = new Date().getHours();
+  const greetingTime = currentHour < 12 ? 'Morning' : currentHour < 17 ? 'Afternoon' : 'Evening';
 
   return (
     <div className="space-y-4 pb-12 font-sans animate-fade-in">
@@ -173,7 +197,7 @@ export function DashboardPage({
                   <span className="w-4 h-4 rounded-full bg-amber-400 text-white flex items-center justify-center text-[10px] shadow-xs">
                     ☀️
                   </span>
-                  <span>Good Morning, Rahul!</span>
+                  <span>Good {greetingTime}, {settings?.userName || 'Rahul'}!</span>
                   <span className="inline-block animate-bounce text-sm">👋</span>
                 </div>
 
@@ -189,18 +213,29 @@ export function DashboardPage({
                 </p>
               </div>
 
-              {/* Goal Pill Button in React + CSS */}
-              <div className="mt-2 sm:mt-2.5">
+              {/* Goal Pill Button & Fresh Data Button in React + CSS */}
+              <div className="mt-2 sm:mt-2.5 flex items-center gap-2 flex-wrap">
                 <button
                   onClick={onOpenNewGoal || (() => setActivePage('goals'))}
                   className="inline-flex items-center gap-2 px-3 sm:px-3.5 py-1 sm:py-1.5 rounded-full bg-white/95 hover:bg-white text-xs font-black text-slate-800 border border-slate-200/90 shadow-sm hover:shadow-md transition-all duration-200 group/pill cursor-pointer"
-                  title="View Target: MERN Full Stack"
+                  title={activeGoal ? `Target: ${activeGoal.name || activeGoal.title}` : "Set Your Goal"}
                 >
                   <span className="w-3.5 h-3.5 rounded-full border-2 border-rose-500 flex items-center justify-center shrink-0">
                     <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
                   </span>
-                  <span className="text-[#2563eb] font-extrabold tracking-tight">MERN Full Stack</span>
+                  <span className="text-[#2563eb] font-extrabold tracking-tight truncate max-w-[130px] sm:max-w-[160px]">
+                    {activeGoal ? (activeGoal.name || activeGoal.title) : "+ Add Goal"}
+                  </span>
                   <ChevronRight size={13} className="text-slate-400 group-hover/pill:translate-x-0.5 transition-transform" />
+                </button>
+
+                <button
+                  onClick={() => setIsClearModalOpen(true)}
+                  className="inline-flex items-center gap-1.5 px-3 py-1 sm:py-1.5 rounded-full bg-white/90 hover:bg-white text-rose-600 hover:text-rose-700 text-xs font-bold border border-rose-200/80 shadow-xs hover:shadow transition cursor-pointer"
+                  title="Clear all data from the dashboard to start fresh"
+                >
+                  <Trash2 size={12} />
+                  <span>Fresh (0 Data)</span>
                 </button>
               </div>
             </div>
@@ -379,7 +414,7 @@ export function DashboardPage({
                     <div className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-cyan-400 border border-white dark:border-dark-900 animate-pulse" />
                   </div>
                   <span className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-blue-50 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300 border border-blue-200/60 dark:border-blue-800/60 shadow-2xs group-hover:border-blue-400 transition-colors">
-                    <span>+2.5h</span>
+                    <span>{subjects.length} subjects</span>
                     <ArrowUpRight size={11} className="text-blue-600 dark:text-blue-400 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform" />
                   </span>
                 </div>
@@ -388,10 +423,10 @@ export function DashboardPage({
                   Total Study Time
                 </span>
                 <div className="text-xl sm:text-2xl font-black text-slate-800 dark:text-slate-100 mt-0.5 mono-number tracking-tight group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
-                  12h 45m
+                  {formatSecondsToShort(displayTotalSeconds)}
                 </div>
-                <p className="text-[11px] text-emerald-600 dark:text-emerald-400 font-semibold mt-0.5 truncate flex items-center gap-1">
-                  <span>+2h 30m than last week</span>
+                <p className="text-[11px] text-slate-400 mt-0.5 truncate flex items-center gap-1">
+                  <span>{displayTotalSeconds > 0 ? `${formatHoursToShort(displayTotalSeconds / 3600)} recorded overall` : 'Start studying to log hours'}</span>
                 </p>
               </div>
 
@@ -400,19 +435,19 @@ export function DashboardPage({
                 <div className="w-full bg-slate-100 dark:bg-slate-800 h-1.5 group-hover:h-2 rounded-full overflow-hidden mb-1 transition-all duration-300 relative">
                   <div
                     className="bg-gradient-to-r from-blue-600 via-indigo-600 to-cyan-500 h-full rounded-full transition-all duration-500 relative overflow-hidden group-hover:shadow-[0_0_12px_rgba(37,99,235,0.6)]"
-                    style={{ width: '32%' }}
+                    style={{ width: `${totalProgressPercent}%` }}
                   >
                     <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/40 to-transparent animate-shimmer" />
                   </div>
                 </div>
                 <div className="flex justify-between items-center text-[10px] text-slate-400 font-medium">
-                  <span>Goal: 40h</span>
-                  <span className="font-bold text-blue-600 dark:text-blue-400 mono-number">32%</span>
+                  <span>Target: {formatHoursToShort(totalTargetHours)}</span>
+                  <span className="font-bold text-blue-600 dark:text-blue-400 mono-number">{totalProgressPercent}%</span>
                 </div>
               </div>
             </div>
 
-            {/* 2. Today's Study Time (2h 15m) */}
+            {/* 2. Today's Study Time */}
             <div
               onClick={() => setActivePage('timer')}
               className="relative overflow-hidden glass-card p-3.5 sm:p-4 cursor-pointer flex flex-col justify-between min-h-[148px] sm:min-h-[155px] group transition-all duration-300 hover:-translate-y-1.5 hover:shadow-[0_14px_30px_-6px_rgba(16,185,129,0.25)] border border-slate-200/80 dark:border-slate-800"
@@ -443,10 +478,10 @@ export function DashboardPage({
                   Today's Study Time
                 </span>
                 <div className="text-xl sm:text-2xl font-black text-slate-800 dark:text-slate-100 mt-0.5 mono-number tracking-tight group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">
-                  2h 15m
+                  {formatSecondsToShort(todayStudySeconds)}
                 </div>
                 <p className="text-[11px] text-slate-400 mt-0.5 truncate">
-                  Target: 4h (56%)
+                  Target: {formatHoursToShort(todayPlannedHours)} ({todayProgressPercent}%)
                 </p>
               </div>
 
@@ -455,19 +490,19 @@ export function DashboardPage({
                 <div className="w-full bg-slate-100 dark:bg-slate-800 h-1.5 group-hover:h-2 rounded-full overflow-hidden mb-1 transition-all duration-300 relative">
                   <div
                     className="bg-gradient-to-r from-emerald-500 via-teal-500 to-green-400 h-full rounded-full transition-all duration-500 relative overflow-hidden group-hover:shadow-[0_0_12px_rgba(16,185,129,0.6)]"
-                    style={{ width: '56%' }}
+                    style={{ width: `${todayProgressPercent}%` }}
                   >
                     <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/40 to-transparent animate-shimmer" />
                   </div>
                 </div>
                 <div className="flex justify-between items-center text-[10px] text-slate-400 font-medium">
-                  <span>Goal: 4h</span>
-                  <span className="font-bold text-emerald-600 dark:text-emerald-400 mono-number">56%</span>
+                  <span>Goal: {formatHoursToShort(todayPlannedHours)}</span>
+                  <span className="font-bold text-emerald-600 dark:text-emerald-400 mono-number">{todayProgressPercent}%</span>
                 </div>
               </div>
             </div>
 
-            {/* 3. Weekly Study Time (14h 30m) */}
+            {/* 3. Weekly Study Time */}
             <div
               onClick={() => setActivePage('targets')}
               className="relative overflow-hidden glass-card p-3.5 sm:p-4 cursor-pointer flex flex-col justify-between min-h-[148px] sm:min-h-[155px] group transition-all duration-300 hover:-translate-y-1.5 hover:shadow-[0_14px_30px_-6px_rgba(139,92,246,0.25)] border border-slate-200/80 dark:border-slate-800"
@@ -493,10 +528,10 @@ export function DashboardPage({
                   Weekly Study Time
                 </span>
                 <div className="text-xl sm:text-2xl font-black text-slate-800 dark:text-slate-100 mt-0.5 mono-number tracking-tight group-hover:text-purple-600 dark:group-hover:text-purple-400 transition-colors">
-                  14h 30m
+                  {formatSecondsToShort(displayWeeklySeconds)}
                 </div>
                 <p className="text-[11px] text-slate-400 mt-0.5 truncate">
-                  Target: 25h (58%)
+                  Target: {formatHoursToShort(weeklyTargetHours)} ({weeklyProgressPercent}%)
                 </p>
               </div>
 
@@ -505,19 +540,19 @@ export function DashboardPage({
                 <div className="w-full bg-slate-100 dark:bg-slate-800 h-1.5 group-hover:h-2 rounded-full overflow-hidden mb-1 transition-all duration-300 relative">
                   <div
                     className="bg-gradient-to-r from-purple-500 via-violet-600 to-indigo-600 h-full rounded-full transition-all duration-500 relative overflow-hidden group-hover:shadow-[0_0_12px_rgba(139,92,246,0.6)]"
-                    style={{ width: '58%' }}
+                    style={{ width: `${weeklyProgressPercent}%` }}
                   >
                     <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/40 to-transparent animate-shimmer" />
                   </div>
                 </div>
                 <div className="flex justify-between items-center text-[10px] text-slate-400 font-medium">
-                  <span>Goal: 25h</span>
-                  <span className="font-bold text-purple-600 dark:text-purple-400 mono-number">58%</span>
+                  <span>Goal: {formatHoursToShort(weeklyTargetHours)}</span>
+                  <span className="font-bold text-purple-600 dark:text-purple-400 mono-number">{weeklyProgressPercent}%</span>
                 </div>
               </div>
             </div>
 
-            {/* 4. Monthly Study Time (48h 20m) */}
+            {/* 4. Monthly Study Time */}
             <div
               onClick={() => setActivePage('analytics')}
               className="relative overflow-hidden glass-card p-3.5 sm:p-4 cursor-pointer flex flex-col justify-between min-h-[148px] sm:min-h-[155px] group transition-all duration-300 hover:-translate-y-1.5 hover:shadow-[0_14px_30px_-6px_rgba(244,63,94,0.25)] border border-slate-200/80 dark:border-slate-800"
@@ -536,7 +571,7 @@ export function DashboardPage({
                     <div className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-amber-400 border border-white dark:border-dark-900" />
                   </div>
                   <span className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-rose-50 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300 border border-rose-200/60 dark:border-rose-800/60 shadow-2xs group-hover:border-rose-400 transition-colors">
-                    <span>OCTOBER</span>
+                    <span>{currentMonthName}</span>
                   </span>
                 </div>
 
@@ -544,10 +579,10 @@ export function DashboardPage({
                   Monthly Study Time
                 </span>
                 <div className="text-xl sm:text-2xl font-black text-slate-800 dark:text-slate-100 mt-0.5 mono-number tracking-tight group-hover:text-rose-600 dark:group-hover:text-rose-400 transition-colors">
-                  48h 20m
+                  {formatSecondsToShort(displayMonthlySeconds)}
                 </div>
                 <p className="text-[11px] text-slate-400 mt-0.5 truncate">
-                  Target: 100h (48%)
+                  Target: {formatHoursToShort(monthlyTargetHours)} ({monthlyProgressPercent}%)
                 </p>
               </div>
 
@@ -556,14 +591,14 @@ export function DashboardPage({
                 <div className="w-full bg-slate-100 dark:bg-slate-800 h-1.5 group-hover:h-2 rounded-full overflow-hidden mb-1 transition-all duration-300 relative">
                   <div
                     className="bg-gradient-to-r from-rose-500 via-pink-500 to-amber-500 h-full rounded-full transition-all duration-500 relative overflow-hidden group-hover:shadow-[0_0_12px_rgba(244,63,94,0.6)]"
-                    style={{ width: '48%' }}
+                    style={{ width: `${monthlyProgressPercent}%` }}
                   >
                     <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/40 to-transparent animate-shimmer" />
                   </div>
                 </div>
                 <div className="flex justify-between items-center text-[10px] text-slate-400 font-medium">
-                  <span>Monthly Target: 100h</span>
-                  <span className="font-bold text-rose-500 mono-number">48%</span>
+                  <span>Monthly Target: {formatHoursToShort(monthlyTargetHours)}</span>
+                  <span className="font-bold text-rose-500 mono-number">{monthlyProgressPercent}%</span>
                 </div>
               </div>
             </div>
@@ -571,54 +606,54 @@ export function DashboardPage({
 
           {/* Row 3: 4 Status Cards with Live Animations & Unique Themed Badges */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5 sm:gap-3.5">
-            {/* 1. Today's Attendance (ABSENT) */}
+            {/* 1. Today's Attendance */}
             <div
               onClick={() => setActivePage('attendance')}
-              className="relative overflow-hidden glass-card border-l-4 border-l-rose-500 hover:border-l-rose-400 p-3.5 sm:p-4 cursor-pointer flex flex-col justify-between min-h-[148px] sm:min-h-[155px] group transition-all duration-300 hover:-translate-y-1.5 hover:shadow-[0_14px_30px_-6px_rgba(244,63,94,0.22)]"
+              className={`relative overflow-hidden glass-card border-l-4 ${isPresent ? 'border-l-emerald-500 hover:border-l-emerald-400' : 'border-l-rose-500 hover:border-l-rose-400'} p-3.5 sm:p-4 cursor-pointer flex flex-col justify-between min-h-[148px] sm:min-h-[155px] group transition-all duration-300 hover:-translate-y-1.5 hover:shadow-[0_14px_30px_-6px_rgba(244,63,94,0.22)]`}
             >
               {/* Specular Light Sweep & Ambient Orb */}
               <div className="absolute inset-0 -translate-x-full group-hover:translate-x-full transition-transform duration-1000 bg-gradient-to-r from-transparent via-white/20 dark:via-white/10 to-transparent pointer-events-none" />
-              <div className="absolute -right-4 -bottom-4 w-20 h-20 rounded-full bg-rose-500/10 dark:bg-rose-500/15 blur-xl pointer-events-none group-hover:scale-150 transition-transform duration-500" />
+              <div className={`absolute -right-4 -bottom-4 w-20 h-20 rounded-full ${isPresent ? 'bg-emerald-500/10 dark:bg-emerald-500/15' : 'bg-rose-500/10 dark:bg-rose-500/15'} blur-xl pointer-events-none group-hover:scale-150 transition-transform duration-500`} />
 
               <div>
                 <div className="flex items-center justify-between mb-2">
                   <div className="relative">
-                    <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-gradient-to-tr from-rose-500 via-red-600 to-pink-600 text-white flex items-center justify-center shadow-md shadow-rose-500/25 ring-2 ring-rose-400/20 group-hover:scale-110 group-hover:rotate-3 transition-all duration-300">
+                    <div className={`w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-gradient-to-tr ${isPresent ? 'from-emerald-500 via-teal-600 to-green-600' : 'from-rose-500 via-red-600 to-pink-600'} text-white flex items-center justify-center shadow-md shadow-rose-500/25 ring-2 ring-rose-400/20 group-hover:scale-110 group-hover:rotate-3 transition-all duration-300`}>
                       <UserCheck size={16} />
                     </div>
                   </div>
-                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-rose-50 text-rose-600 dark:bg-rose-950/60 dark:text-rose-300 border border-rose-200/60 dark:border-rose-800/60 shadow-2xs group-hover:border-rose-400 transition-colors">
-                    <span className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-ping" />
-                    <span>✕ ABSENT</span>
+                  <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-extrabold ${isPresent ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-950/60 dark:text-emerald-300 border-emerald-200/60 dark:border-emerald-800/60' : 'bg-rose-50 text-rose-600 dark:bg-rose-950/60 dark:text-rose-300 border-rose-200/60 dark:border-rose-800/60'} border shadow-2xs transition-colors`}>
+                    <span className={`w-1.5 h-1.5 rounded-full ${isPresent ? 'bg-emerald-500' : 'bg-rose-500 animate-ping'}`} />
+                    <span>{isPresent ? '✓ PRESENT' : '✕ ABSENT'}</span>
                   </span>
                 </div>
 
                 <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
                   Today's Attendance
                 </span>
-                <div className="text-xl sm:text-2xl font-black text-rose-600 dark:text-rose-400 mt-0.5 tracking-tight">
-                  ABSENT
+                <div className={`text-xl sm:text-2xl font-black mt-0.5 tracking-tight ${isPresent ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
+                  {isPresent ? 'PRESENT' : 'ABSENT'}
                 </div>
                 <p className="text-[11px] text-slate-400 mt-0.5 truncate">
-                  Required: 30m (0m logged)
+                  Required: {minAttendanceMinutes}m ({attendanceLoggedMinutes}m logged)
                 </p>
               </div>
 
               <div className="mt-3 pt-2 border-t border-slate-100 dark:border-slate-800/80">
                 <div className="w-full bg-slate-100 dark:bg-slate-800 h-1.5 group-hover:h-2 rounded-full overflow-hidden mb-1 transition-all duration-300 relative">
                   <div
-                    className="bg-gradient-to-r from-rose-500 to-red-600 h-full rounded-full transition-all duration-500 relative overflow-hidden group-hover:shadow-[0_0_12px_rgba(244,63,94,0.6)]"
-                    style={{ width: '0%' }}
+                    className={`bg-gradient-to-r ${isPresent ? 'from-emerald-500 to-teal-500' : 'from-rose-500 to-red-600'} h-full rounded-full transition-all duration-500 relative overflow-hidden`}
+                    style={{ width: `${attendanceProgressPercent}%` }}
                   />
                 </div>
                 <div className="flex justify-between items-center text-[10px] text-slate-400 font-medium">
-                  <span>Threshold: 30m</span>
-                  <span className="font-bold text-rose-500 mono-number">0%</span>
+                  <span>Threshold: {minAttendanceMinutes}m</span>
+                  <span className={`font-bold mono-number ${isPresent ? 'text-emerald-600' : 'text-rose-500'}`}>{attendanceProgressPercent}%</span>
                 </div>
               </div>
             </div>
 
-            {/* 2. Completed Topics (8 / 12) */}
+            {/* 2. Completed Topics */}
             <div
               onClick={() => setActivePage('topics')}
               className="relative overflow-hidden glass-card border-l-4 border-l-emerald-500 hover:border-l-emerald-400 p-3.5 sm:p-4 cursor-pointer flex flex-col justify-between min-h-[148px] sm:min-h-[155px] group transition-all duration-300 hover:-translate-y-1.5 hover:shadow-[0_14px_30px_-6px_rgba(16,185,129,0.22)]"
@@ -633,10 +668,12 @@ export function DashboardPage({
                     <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-gradient-to-tr from-teal-500 via-emerald-600 to-green-600 text-white flex items-center justify-center shadow-md shadow-teal-500/25 ring-2 ring-teal-400/20 group-hover:scale-110 group-hover:-rotate-3 transition-all duration-300">
                       <CheckCircle2 size={16} />
                     </div>
-                    <Sparkles size={11} className="absolute -top-1 -right-1 text-amber-400 animate-bounce" />
+                    {completedTopics > 0 && (
+                      <Sparkles size={11} className="absolute -top-1 -right-1 text-amber-400 animate-bounce" />
+                    )}
                   </div>
                   <span className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200/60 dark:border-emerald-800/60 shadow-2xs group-hover:border-emerald-400 transition-colors">
-                    <span>67% DONE</span>
+                    <span>{topicProgressPercent}% DONE</span>
                   </span>
                 </div>
 
@@ -644,10 +681,10 @@ export function DashboardPage({
                   Completed Topics
                 </span>
                 <div className="text-xl sm:text-2xl font-black text-slate-800 dark:text-slate-100 mt-0.5 mono-number tracking-tight group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">
-                  8 / 12
+                  {completedTopics} / {topics.length}
                 </div>
                 <p className="text-[11px] text-slate-400 mt-0.5 truncate">
-                  67% completed
+                  {topicProgressPercent}% completed
                 </p>
               </div>
 
@@ -655,19 +692,19 @@ export function DashboardPage({
                 <div className="w-full bg-slate-100 dark:bg-slate-800 h-1.5 group-hover:h-2 rounded-full overflow-hidden mb-1 transition-all duration-300 relative">
                   <div
                     className="bg-gradient-to-r from-teal-500 via-emerald-500 to-green-500 h-full rounded-full transition-all duration-500 relative overflow-hidden group-hover:shadow-[0_0_12px_rgba(16,185,129,0.6)]"
-                    style={{ width: '67%' }}
+                    style={{ width: `${topicProgressPercent}%` }}
                   >
                     <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/40 to-transparent animate-shimmer" />
                   </div>
                 </div>
                 <div className="flex justify-between items-center text-[10px] text-slate-400 font-medium">
                   <span>Completed</span>
-                  <span className="font-bold text-emerald-600 dark:text-emerald-400 mono-number">67%</span>
+                  <span className="font-bold text-emerald-600 dark:text-emerald-400 mono-number">{topicProgressPercent}%</span>
                 </div>
               </div>
             </div>
 
-            {/* 3. Pending Topics (4) */}
+            {/* 3. Pending Topics */}
             <div
               onClick={() => setActivePage('topics')}
               className="relative overflow-hidden glass-card border-l-4 border-l-rose-400 hover:border-l-rose-500 p-3.5 sm:p-4 cursor-pointer flex flex-col justify-between min-h-[148px] sm:min-h-[155px] group transition-all duration-300 hover:-translate-y-1.5 hover:shadow-[0_14px_30px_-6px_rgba(244,63,94,0.22)]"
@@ -682,10 +719,12 @@ export function DashboardPage({
                     <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-gradient-to-tr from-amber-500 via-orange-500 to-rose-500 text-white flex items-center justify-center shadow-md shadow-amber-500/25 ring-2 ring-amber-400/20 group-hover:scale-110 group-hover:rotate-6 transition-all duration-300">
                       <ListTodo size={16} />
                     </div>
-                    <Flame size={11} className="absolute -top-1 -right-1 text-rose-500 animate-pulse" />
+                    {pendingTopics > 0 && (
+                      <Flame size={11} className="absolute -top-1 -right-1 text-rose-500 animate-pulse" />
+                    )}
                   </div>
                   <span className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-rose-50 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300 border border-rose-200/60 dark:border-rose-800/60 shadow-2xs group-hover:border-rose-400 transition-colors">
-                    <span>4 LEFT</span>
+                    <span>{pendingTopics} LEFT</span>
                   </span>
                 </div>
 
@@ -693,10 +732,10 @@ export function DashboardPage({
                   Pending Topics
                 </span>
                 <div className="text-xl sm:text-2xl font-black text-slate-800 dark:text-slate-100 mt-0.5 mono-number tracking-tight group-hover:text-rose-600 dark:group-hover:text-rose-400 transition-colors">
-                  4
+                  {pendingTopics}
                 </div>
                 <p className="text-[11px] text-slate-400 mt-0.5 truncate">
-                  Remaining syllabus
+                  {pendingTopics > 0 ? 'Remaining syllabus' : topics.length > 0 ? 'All topics completed! 🎉' : 'No topics added yet'}
                 </p>
               </div>
 
@@ -704,19 +743,19 @@ export function DashboardPage({
                 <div className="w-full bg-slate-100 dark:bg-slate-800 h-1.5 group-hover:h-2 rounded-full overflow-hidden mb-1 transition-all duration-300 relative">
                   <div
                     className="bg-gradient-to-r from-amber-500 via-rose-400 to-rose-500 h-full rounded-full transition-all duration-500 relative overflow-hidden group-hover:shadow-[0_0_12px_rgba(244,63,94,0.6)]"
-                    style={{ width: '33%' }}
+                    style={{ width: `${topics.length > 0 ? Math.round((pendingTopics / topics.length) * 100) : 0}%` }}
                   >
                     <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/40 to-transparent animate-shimmer" />
                   </div>
                 </div>
                 <div className="flex justify-between items-center text-[10px] text-slate-400 font-medium">
                   <span>Pending</span>
-                  <span className="font-bold text-rose-500 mono-number">33%</span>
+                  <span className="font-bold text-rose-500 mono-number">{topics.length > 0 ? Math.round((pendingTopics / topics.length) * 100) : 0}%</span>
                 </div>
               </div>
             </div>
 
-            {/* 4. Current Goal (MERN Full Stack) */}
+            {/* 4. Current Goal */}
             <div
               onClick={onOpenNewGoal || (() => setActivePage('goals'))}
               className="relative overflow-hidden glass-card border-l-4 border-l-purple-500 hover:border-l-purple-400 p-3.5 sm:p-4 cursor-pointer flex flex-col justify-between min-h-[148px] sm:min-h-[155px] group transition-all duration-300 hover:-translate-y-1.5 hover:shadow-[0_14px_30px_-6px_rgba(139,92,246,0.25)]"
@@ -734,7 +773,7 @@ export function DashboardPage({
                     <span className="absolute -top-1 -right-1 text-amber-300 text-[10px] font-black">★</span>
                   </div>
                   <span className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-purple-50 text-purple-700 dark:bg-purple-950/60 dark:text-purple-300 border border-purple-200/60 dark:border-purple-800/60 shadow-2xs group-hover:border-purple-400 transition-colors">
-                    <span>GOAL 60%</span>
+                    <span>{activeGoal ? `GOAL ${goalProgressPercent}%` : 'GOAL 0%'}</span>
                   </span>
                 </div>
 
@@ -742,11 +781,11 @@ export function DashboardPage({
                   Current Goal
                 </span>
                 <div className="text-xl sm:text-2xl font-black text-slate-800 dark:text-slate-100 mt-0.5 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors truncate tracking-tight flex items-center justify-between">
-                  <span>MERN Full Stack</span>
+                  <span className="truncate">{activeGoal ? (activeGoal.name || activeGoal.title) : 'No Goal Set'}</span>
                   <span className="text-xs text-purple-600 dark:text-purple-400 opacity-0 group-hover:opacity-100 group-hover:translate-x-0.5 transition-all">→</span>
                 </div>
                 <p className="text-[11px] text-slate-400 mt-0.5 truncate">
-                  Click to add target
+                  {activeGoal ? `${activeGoal.targetHours || 0}h target` : 'Click to add a goal'}
                 </p>
               </div>
 
@@ -754,14 +793,14 @@ export function DashboardPage({
                 <div className="w-full bg-slate-100 dark:bg-slate-800 h-1.5 group-hover:h-2 rounded-full overflow-hidden mb-1 transition-all duration-300 relative">
                   <div
                     className="bg-gradient-to-r from-violet-600 via-purple-600 to-indigo-600 h-full rounded-full transition-all duration-500 relative overflow-hidden group-hover:shadow-[0_0_12px_rgba(139,92,246,0.6)]"
-                    style={{ width: '60%' }}
+                    style={{ width: `${goalProgressPercent}%` }}
                   >
                     <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/40 to-transparent animate-shimmer" />
                   </div>
                 </div>
                 <div className="flex justify-between items-center text-[10px] text-slate-400 font-medium">
-                  <span>No Goal</span>
-                  <span className="font-bold text-purple-600 mono-number">60%</span>
+                  <span>{activeGoal ? (activeGoal.category || 'Target') : 'No Goal'}</span>
+                  <span className="font-bold text-purple-600 mono-number">{goalProgressPercent}%</span>
                 </div>
               </div>
             </div>
@@ -779,14 +818,20 @@ export function DashboardPage({
                     Today's Study Progress & Schedule
                   </h3>
                   <p className="text-[11px] text-slate-400 mt-0.5">
-                    Planned vs actual study performance for 21 Oct 2026
+                    Planned vs actual study performance for {formatFriendlyDate(todayStr)}
                   </p>
                 </div>
               </div>
 
               <div className="flex items-center gap-2.5 shrink-0">
-                <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
-                  PENDING
+                <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
+                  todayProgressPercent >= 100
+                    ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/80 dark:text-emerald-300'
+                    : todayStudySeconds > 0
+                    ? 'bg-blue-100 text-blue-700 dark:bg-blue-950/80 dark:text-blue-300'
+                    : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300'
+                }`}>
+                  {todayProgressPercent >= 100 ? 'COMPLETED' : todayStudySeconds > 0 ? 'IN PROGRESS' : 'NOT STARTED'}
                 </span>
                 <button
                   onClick={() => setActivePage('timetable')}
@@ -798,10 +843,14 @@ export function DashboardPage({
               </div>
             </div>
 
-            {/* Circular Gauge 60% + 4 Stat Chips (4h, 2h 24m, 1h 36m, 30m) */}
+            {/* Circular Gauge + 4 Dynamic Stat Chips */}
             <div className="grid grid-cols-1 sm:grid-cols-12 gap-4 items-center mt-4">
-              {/* Left Circular Ring */}
-              <div className="sm:col-span-3 flex flex-col items-center justify-center py-1">
+              {/* Left Circular Ring - Clickable to start timer */}
+              <div
+                onClick={() => setActivePage('timer')}
+                className="sm:col-span-3 flex flex-col items-center justify-center py-1 cursor-pointer group/gauge hover:scale-105 transition-transform"
+                title="Click to start study session"
+              >
                 <div className="relative w-24 h-24 flex items-center justify-center">
                   <svg className="w-full h-full transform -rotate-90" viewBox="0 0 100 100">
                     <circle
@@ -820,15 +869,15 @@ export function DashboardPage({
                       stroke="#3b82f6"
                       strokeWidth="9"
                       strokeDasharray="251.2"
-                      strokeDashoffset={251.2 - (251.2 * 60) / 100}
+                      strokeDashoffset={251.2 - (251.2 * todayProgressPercent) / 100}
                       strokeLinecap="round"
                       fill="transparent"
                       className="transition-all duration-700 ease-out"
                     />
                   </svg>
                   <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
-                    <span className="text-lg font-black text-slate-800 dark:text-slate-100 leading-none mono-number">
-                      60%
+                    <span className="text-lg font-black text-slate-800 dark:text-slate-100 leading-none mono-number group-hover/gauge:text-blue-600 transition-colors">
+                      {todayProgressPercent}%
                     </span>
                     <span className="text-[10px] font-medium text-slate-400 mt-0.5">
                       Completed
@@ -837,49 +886,65 @@ export function DashboardPage({
                 </div>
               </div>
 
-              {/* Right 4 Stat Chips */}
+              {/* Right 4 Stat Chips - Fully Clickable */}
               <div className="sm:col-span-9 grid grid-cols-2 sm:grid-cols-4 gap-2">
-                {/* 1. Planned Hours: 4h */}
-                <div className="bg-[#f8fafc] dark:bg-dark-950 border border-slate-100 dark:border-slate-800/80 rounded-xl p-2.5 flex flex-col items-center text-center">
-                  <div className="w-6 h-6 rounded-lg bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 flex items-center justify-center mb-1">
+                {/* 1. Planned Hours */}
+                <div
+                  onClick={onOpenTomorrowTarget || (() => setActivePage('targets'))}
+                  className="bg-[#f8fafc] dark:bg-dark-950 border border-slate-100 dark:border-slate-800/80 rounded-xl p-2.5 flex flex-col items-center text-center cursor-pointer hover:border-indigo-300 dark:hover:border-indigo-700 hover:shadow-xs transition group"
+                  title="Click to set target hours"
+                >
+                  <div className="w-6 h-6 rounded-lg bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 flex items-center justify-center mb-1 group-hover:scale-110 transition-transform">
                     <Clock size={13} />
                   </div>
                   <span className="text-[10px] text-slate-400 font-medium">Planned Hours</span>
-                  <span className="text-sm font-extrabold text-slate-800 dark:text-slate-100 mt-0.5 mono-number">
-                    4h
+                  <span className="text-sm font-extrabold text-slate-800 dark:text-slate-100 mt-0.5 mono-number group-hover:text-indigo-600 transition-colors">
+                    {formatHoursToShort(todayPlannedHours)}
                   </span>
                 </div>
 
-                {/* 2. Completed: 2h 24m */}
-                <div className="bg-[#f8fafc] dark:bg-dark-950 border border-slate-100 dark:border-slate-800/80 rounded-xl p-2.5 flex flex-col items-center text-center">
-                  <div className="w-6 h-6 rounded-lg bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 flex items-center justify-center mb-1">
+                {/* 2. Completed */}
+                <div
+                  onClick={() => setActivePage('timer')}
+                  className="bg-[#f8fafc] dark:bg-dark-950 border border-slate-100 dark:border-slate-800/80 rounded-xl p-2.5 flex flex-col items-center text-center cursor-pointer hover:border-emerald-300 dark:hover:border-emerald-700 hover:shadow-xs transition group"
+                  title="Click to view timer"
+                >
+                  <div className="w-6 h-6 rounded-lg bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 flex items-center justify-center mb-1 group-hover:scale-110 transition-transform">
                     <CheckCircle2 size={13} />
                   </div>
                   <span className="text-[10px] text-slate-400 font-medium">Completed</span>
-                  <span className="text-sm font-extrabold text-slate-800 dark:text-slate-100 mt-0.5 mono-number">
-                    2h 24m
+                  <span className="text-sm font-extrabold text-slate-800 dark:text-slate-100 mt-0.5 mono-number group-hover:text-emerald-600 transition-colors">
+                    {formatSecondsToShort(todayStudySeconds)}
                   </span>
                 </div>
 
-                {/* 3. Remaining: 1h 36m */}
-                <div className="bg-[#f8fafc] dark:bg-dark-950 border border-slate-100 dark:border-slate-800/80 rounded-xl p-2.5 flex flex-col items-center text-center">
-                  <div className="w-6 h-6 rounded-lg bg-amber-50 dark:bg-amber-950/60 text-amber-600 flex items-center justify-center mb-1">
+                {/* 3. Remaining */}
+                <div
+                  onClick={() => setActivePage('timer')}
+                  className="bg-[#f8fafc] dark:bg-dark-950 border border-slate-100 dark:border-slate-800/80 rounded-xl p-2.5 flex flex-col items-center text-center cursor-pointer hover:border-amber-300 dark:hover:border-amber-700 hover:shadow-xs transition group"
+                  title="Click to continue studying"
+                >
+                  <div className="w-6 h-6 rounded-lg bg-amber-50 dark:bg-amber-950/60 text-amber-600 flex items-center justify-center mb-1 group-hover:scale-110 transition-transform">
                     <Hourglass size={13} />
                   </div>
                   <span className="text-[10px] text-slate-400 font-medium">Remaining</span>
-                  <span className="text-sm font-extrabold text-slate-800 dark:text-slate-100 mt-0.5 mono-number">
-                    1h 36m
+                  <span className="text-sm font-extrabold text-slate-800 dark:text-slate-100 mt-0.5 mono-number group-hover:text-amber-600 transition-colors">
+                    {formatHoursToShort(todayRemainingHours)}
                   </span>
                 </div>
 
-                {/* 4. Break Time: 30m */}
-                <div className="bg-[#f8fafc] dark:bg-dark-950 border border-slate-100 dark:border-slate-800/80 rounded-xl p-2.5 flex flex-col items-center text-center">
-                  <div className="w-6 h-6 rounded-lg bg-rose-50 dark:bg-rose-950/60 text-rose-500 flex items-center justify-center mb-1">
+                {/* 4. Break Time */}
+                <div
+                  onClick={() => setActivePage('focus')}
+                  className="bg-[#f8fafc] dark:bg-dark-950 border border-slate-100 dark:border-slate-800/80 rounded-xl p-2.5 flex flex-col items-center text-center cursor-pointer hover:border-rose-300 dark:hover:border-rose-700 hover:shadow-xs transition group"
+                  title="Click for Focus & Break mode"
+                >
+                  <div className="w-6 h-6 rounded-lg bg-rose-50 dark:bg-rose-950/60 text-rose-500 flex items-center justify-center mb-1 group-hover:scale-110 transition-transform">
                     <Coffee size={13} />
                   </div>
                   <span className="text-[10px] text-slate-400 font-medium">Break Time</span>
-                  <span className="text-sm font-extrabold text-slate-800 dark:text-slate-100 mt-0.5 mono-number">
-                    30m
+                  <span className="text-sm font-extrabold text-slate-800 dark:text-slate-100 mt-0.5 mono-number group-hover:text-rose-500 transition-colors">
+                    {formatSecondsToShort(todayBreakSeconds)}
                   </span>
                 </div>
               </div>
@@ -909,113 +974,98 @@ export function DashboardPage({
                   </button>
                 </div>
 
-                {/* 4 horizontal Subject Chips (JS 80%, React 60%, Node.js 40%, MongoDB 20%) */}
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                  {/* JS */}
-                  <div className="bg-[#f8fafc] dark:bg-dark-950 border border-slate-100 dark:border-slate-800/80 rounded-xl p-2.5 flex flex-col justify-between hover:border-slate-200 transition">
-                    <div className="flex items-center justify-between gap-1 mb-1.5">
-                      <span className="w-6 h-6 rounded-md bg-amber-400 text-slate-900 font-black text-[11px] flex items-center justify-center">
-                        JS
-                      </span>
-                      <span className="font-bold text-[11px] text-purple-600 mono-number">
-                        80%
-                      </span>
+                {/* Dynamic Subject Chips or Clean Empty State */}
+                {subjects.length === 0 ? (
+                  <div className="py-7 text-center flex flex-col items-center justify-center">
+                    <div className="w-10 h-10 rounded-xl bg-purple-50 dark:bg-purple-950/60 text-purple-600 flex items-center justify-center mb-2">
+                      <Layers size={18} />
                     </div>
-                    <span className="text-[11px] font-semibold text-slate-700 dark:text-slate-200 truncate block mb-2">
-                      JavaScript
-                    </span>
-                    <div className="w-full bg-slate-200/70 dark:bg-slate-800 h-1.5 rounded-full overflow-hidden">
-                      <div className="h-full rounded-full bg-purple-600" style={{ width: '80%' }} />
-                    </div>
+                    <span className="text-xs font-bold text-slate-700 dark:text-slate-200">No subjects added yet</span>
+                    <span className="text-[11px] text-slate-400 mt-0.5 mb-2.5">Add subjects to track their syllabus progress</span>
+                    <button
+                      onClick={onOpenNewSubject}
+                      className="px-3 py-1 rounded-full bg-purple-600 hover:bg-purple-700 text-white text-[11px] font-bold transition shadow-xs cursor-pointer"
+                    >
+                      + Add Subject
+                    </button>
                   </div>
+                ) : (
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                    {subjects.slice(0, 4).map((sub) => {
+                      const subTopics = topics.filter((t) => t.subjectId === sub.id);
+                      const completedSubTopics = subTopics.filter((t) => t.status === 'Completed' || t.completed).length;
+                      const subProgress = subTopics.length > 0 ? Math.round((completedSubTopics / subTopics.length) * 100) : 0;
+                      const initials = (sub.code || sub.name || 'S').slice(0, 3).toUpperCase();
+                      const color = sub.color || '#8b5cf6';
 
-                  {/* React */}
-                  <div className="bg-[#f8fafc] dark:bg-dark-950 border border-slate-100 dark:border-slate-800/80 rounded-xl p-2.5 flex flex-col justify-between hover:border-slate-200 transition">
-                    <div className="flex items-center justify-between gap-1 mb-1.5">
-                      <span className="w-6 h-6 rounded-md bg-sky-500 text-white font-black text-xs flex items-center justify-center">
-                        ⚛
-                      </span>
-                      <span className="font-bold text-[11px] text-emerald-600 mono-number">
-                        60%
-                      </span>
-                    </div>
-                    <span className="text-[11px] font-semibold text-slate-700 dark:text-slate-200 truncate block mb-2">
-                      React
-                    </span>
-                    <div className="w-full bg-slate-200/70 dark:bg-slate-800 h-1.5 rounded-full overflow-hidden">
-                      <div className="h-full rounded-full bg-emerald-500" style={{ width: '60%' }} />
-                    </div>
+                      return (
+                        <div
+                          key={sub.id}
+                          onClick={() => setActivePage('subjects')}
+                          className="bg-[#f8fafc] dark:bg-dark-950 border border-slate-100 dark:border-slate-800/80 rounded-xl p-2.5 flex flex-col justify-between hover:border-slate-200 dark:hover:border-slate-700 cursor-pointer transition group"
+                        >
+                          <div className="flex items-center justify-between gap-1 mb-1.5">
+                            <span
+                              className="w-6 h-6 rounded-md text-white font-black text-[10px] flex items-center justify-center shadow-2xs"
+                              style={{ backgroundColor: color }}
+                            >
+                              {initials}
+                            </span>
+                            <span className="font-bold text-[11px] text-purple-600 dark:text-purple-400 mono-number">
+                              {subProgress}%
+                            </span>
+                          </div>
+                          <span className="text-[11px] font-semibold text-slate-700 dark:text-slate-200 truncate block mb-2" title={sub.name}>
+                            {sub.name}
+                          </span>
+                          <div className="w-full bg-slate-200/70 dark:bg-slate-800 h-1.5 rounded-full overflow-hidden">
+                            <div
+                              className="h-full rounded-full transition-all duration-500"
+                              style={{ width: `${subProgress}%`, backgroundColor: color }}
+                            />
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
+                )}
 
-                  {/* Node.js */}
-                  <div className="bg-[#f8fafc] dark:bg-dark-950 border border-slate-100 dark:border-slate-800/80 rounded-xl p-2.5 flex flex-col justify-between hover:border-slate-200 transition">
-                    <div className="flex items-center justify-between gap-1 mb-1.5">
-                      <span className="w-6 h-6 rounded-md bg-emerald-600 text-white font-black text-[10px] flex items-center justify-center">
-                        &lt;&gt;
-                      </span>
-                      <span className="font-bold text-[11px] text-blue-600 mono-number">
-                        40%
-                      </span>
-                    </div>
-                    <span className="text-[11px] font-semibold text-slate-700 dark:text-slate-200 truncate block mb-2">
-                      Node.js
-                    </span>
-                    <div className="w-full bg-slate-200/70 dark:bg-slate-800 h-1.5 rounded-full overflow-hidden">
-                      <div className="h-full rounded-full bg-blue-600" style={{ width: '40%' }} />
-                    </div>
-                  </div>
-
-                  {/* MongoDB */}
-                  <div className="bg-[#f8fafc] dark:bg-dark-950 border border-slate-100 dark:border-slate-800/80 rounded-xl p-2.5 flex flex-col justify-between hover:border-slate-200 transition">
-                    <div className="flex items-center justify-between gap-1 mb-1.5">
-                      <span className="w-6 h-6 rounded-md bg-amber-500 text-white font-black text-[10px] flex items-center justify-center">
-                        🍃
-                      </span>
-                      <span className="font-bold text-[11px] text-amber-600 mono-number">
-                        20%
-                      </span>
-                    </div>
-                    <span className="text-[11px] font-semibold text-slate-700 dark:text-slate-200 truncate block mb-2">
-                      MongoDB
-                    </span>
-                    <div className="w-full bg-slate-200/70 dark:bg-slate-800 h-1.5 rounded-full overflow-hidden">
-                      <div className="h-full rounded-full bg-amber-500" style={{ width: '20%' }} />
-                    </div>
-                  </div>
-                </div>
-
-                {/* Micro feature pills row inside Subject Wise Progress matching screenshot */}
+                {/* Micro feature pills row inside Subject Wise Progress */}
                 <div className="flex flex-wrap items-center gap-3 pt-3 mt-3 border-t border-slate-100 dark:border-slate-800 text-[11px] text-slate-500 dark:text-slate-400 font-medium">
-                  <span className="flex items-center gap-1.5 hover:text-blue-600 cursor-pointer">
+                  <span onClick={() => setActivePage('timer')} className="flex items-center gap-1.5 hover:text-blue-600 cursor-pointer">
                     <Zap size={13} className="text-blue-500" /> Fast Learning
                   </span>
-                  <span className="flex items-center gap-1.5 hover:text-blue-600 cursor-pointer">
+                  <span onClick={() => setActivePage('focus')} className="flex items-center gap-1.5 hover:text-blue-600 cursor-pointer">
                     <Target size={13} className="text-purple-500" /> Better Focus
                   </span>
-                  <span className="flex items-center gap-1.5 hover:text-blue-600 cursor-pointer">
+                  <span onClick={() => setActivePage('analytics')} className="flex items-center gap-1.5 hover:text-blue-600 cursor-pointer">
                     <LineChart size={13} className="text-emerald-500" /> Track Progress
                   </span>
-                  <span className="flex items-center gap-1.5 hover:text-blue-600 cursor-pointer">
+                  <span onClick={() => setActivePage('goals')} className="flex items-center gap-1.5 hover:text-blue-600 cursor-pointer">
                     <Trophy size={13} className="text-amber-500" /> Achieve Goals
                   </span>
                 </div>
               </div>
             </div>
 
-            {/* Weekly Study Activity Bar Chart (4 cols on md) + Motivation pill */}
+            {/* Weekly Study Activity Bar Chart */}
             <div className="md:col-span-5 lg:col-span-4 glass-card p-4 sm:p-5 flex flex-col justify-between">
               <div>
-                <div className="flex items-center justify-between pb-2.5 border-b border-slate-100 dark:border-slate-800 mb-2">
+                <div
+                  onClick={() => setActivePage('analytics')}
+                  className="flex items-center justify-between pb-2.5 border-b border-slate-100 dark:border-slate-800 mb-2 cursor-pointer group"
+                  title="View detailed Analytics"
+                >
                   <div className="flex items-center gap-2">
-                    <div className="w-6 h-6 rounded-lg bg-blue-50 dark:bg-blue-950/60 text-blue-600 flex items-center justify-center">
+                    <div className="w-6 h-6 rounded-lg bg-blue-50 dark:bg-blue-950/60 text-blue-600 flex items-center justify-center group-hover:scale-110 transition-transform">
                       <LineChart size={14} />
                     </div>
-                    <h4 className="text-xs sm:text-sm font-bold text-slate-800 dark:text-slate-100">
+                    <h4 className="text-xs sm:text-sm font-bold text-slate-800 dark:text-slate-100 group-hover:text-blue-600 transition-colors">
                       Weekly Study Activity
                     </h4>
                   </div>
-                  <span className="text-[11px] font-semibold text-slate-400 mono-number">
-                    0m total
+                  <span className="text-[11px] font-semibold text-slate-400 mono-number group-hover:text-slate-600 transition-colors">
+                    {formatSecondsToShort(displayWeeklySeconds)} total
                   </span>
                 </div>
 
@@ -1023,31 +1073,30 @@ export function DashboardPage({
                 <div className="flex items-end h-24 pt-1 pb-1 relative">
                   {/* Y-axis labels */}
                   <div className="flex flex-col justify-between h-full text-[9px] text-slate-400 pr-1.5 shrink-0 select-none pb-4 mono-number">
-                    <span>4h</span>
-                    <span>3h</span>
-                    <span>2h</span>
-                    <span>1h</span>
+                    <span>{maxChartHours}h</span>
+                    <span>{Math.round(maxChartHours * 0.75)}h</span>
+                    <span>{Math.round(maxChartHours * 0.5)}h</span>
+                    <span>{Math.round(maxChartHours * 0.25)}h</span>
                     <span>0</span>
                   </div>
 
                   {/* Bars container */}
                   <div className="flex-1 flex items-end justify-between h-full border-b border-slate-100 dark:border-slate-800 pb-4 pl-1 gap-1.5">
-                    {[
-                      { day: 'Mon', h: 0.6 },
-                      { day: 'Tue', h: 0.5 },
-                      { day: 'Wed', h: 1.4, isToday: true },
-                      { day: 'Thu', h: 0.3 },
-                      { day: 'Fri', h: 0.8 },
-                      { day: 'Sat', h: 0.4 },
-                      { day: 'Sun', h: 0.5 },
-                    ].map((item, idx) => {
-                      const barPercent = Math.min(100, Math.max(10, (item.h / 4) * 100));
+                    {weekChartData.map((item, idx) => {
+                      const barPercent = item.h > 0 ? Math.min(100, Math.max(12, (item.h / maxChartHours) * 100)) : 4;
                       return (
-                        <div key={idx} className="flex-1 flex flex-col items-center h-full justify-end group cursor-pointer relative">
+                        <div
+                          key={idx}
+                          onClick={() => setActivePage('history')}
+                          className="flex-1 flex flex-col items-center h-full justify-end group cursor-pointer relative"
+                          title={`${item.day}: ${item.h}h (${formatSecondsToShort(item.seconds)}) - Click to view history`}
+                        >
                           <div
-                            className={`w-full max-w-[18px] rounded-t-md transition-all ${
+                            className={`w-full max-w-[18px] rounded-t-md transition-all group-hover:scale-y-105 origin-bottom ${
                               item.isToday
                                 ? 'bg-[#5b64e8] shadow-sm shadow-indigo-500/30'
+                                : item.h > 0
+                                ? 'bg-blue-400 dark:bg-blue-600 hover:bg-blue-500'
                                 : 'bg-slate-200/80 dark:bg-slate-800 hover:bg-slate-300'
                             }`}
                             style={{ height: `${barPercent}%` }}
@@ -1061,13 +1110,17 @@ export function DashboardPage({
                   </div>
                 </div>
 
-                {/* Potted plant motivation banner matching screenshot */}
-                <div className="mt-5 pt-2.5 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-xs text-slate-600 dark:text-slate-300">
+                {/* Potted plant motivation banner */}
+                <div
+                  onClick={() => setActivePage('focus')}
+                  className="mt-5 pt-2.5 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-xs text-slate-600 dark:text-slate-300 cursor-pointer hover:text-emerald-600 dark:hover:text-emerald-400 transition group"
+                  title="Click to enter Focus Mode"
+                >
                   <div className="flex items-center gap-1.5 font-semibold text-[11px]">
                     <span className="text-rose-500">❤️</span>
                     <span>"Progress, not perfection."</span>
                   </div>
-                  <div className="w-8 h-8 rounded-lg bg-emerald-50 dark:bg-emerald-950/60 flex items-center justify-center text-sm">
+                  <div className="w-8 h-8 rounded-lg bg-emerald-50 dark:bg-emerald-950/60 flex items-center justify-center text-sm group-hover:scale-110 transition-transform">
                     🪴
                   </div>
                 </div>
@@ -1079,275 +1132,306 @@ export function DashboardPage({
         {/* ================= RIGHT COLUMN (Cols 9 to 12 on xl, 3-cols row on < xl) ================= */}
         <div className="xl:col-span-4 2xl:col-span-4">
           <div className="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-1 gap-3.5 sm:gap-4 items-start">
-            {/* 1. Today's To-Do List matching screenshot */}
-          <div className="glass-card p-4 sm:p-5">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800 mb-3">
-              <div className="flex items-center gap-2">
-                <div className="w-7 h-7 rounded-lg bg-blue-50 dark:bg-blue-950/60 text-blue-600 flex items-center justify-center">
-                  <Calendar size={15} />
+            {/* 1. Today's To-Do List */}
+            <div className="glass-card p-4 sm:p-5">
+              <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800 mb-3">
+                <div className="flex items-center gap-2">
+                  <div className="w-7 h-7 rounded-lg bg-blue-50 dark:bg-blue-950/60 text-blue-600 flex items-center justify-center">
+                    <Calendar size={15} />
+                  </div>
+                  <div>
+                    <h4 className="text-xs sm:text-sm font-bold text-slate-800 dark:text-slate-100 leading-tight">
+                      Today's To-Do List
+                    </h4>
+                    <span className="text-[10px] text-slate-400 block font-medium">
+                      {formatFriendlyDate(todayStr)}
+                    </span>
+                  </div>
                 </div>
-                <div>
-                  <h4 className="text-xs sm:text-sm font-bold text-slate-800 dark:text-slate-100 leading-tight">
-                    Today's To-Do List
-                  </h4>
-                  <span className="text-[10px] text-slate-400 block font-medium">
-                    Wed, 21 Oct 2026
-                  </span>
-                </div>
-              </div>
 
-              <button
-                onClick={onOpenTomorrowTarget}
-                className="px-2.5 py-1 rounded-full bg-blue-50 hover:bg-blue-100 dark:bg-blue-950/80 dark:hover:bg-blue-900 text-blue-600 dark:text-blue-300 text-[11px] font-bold transition flex items-center gap-1"
-              >
-                <span>+ Add</span>
-              </button>
-            </div>
-
-            {/* Todo Items */}
-            <div className="space-y-2">
-              {todoItems.map((item) => (
-                <div
-                  key={item.id}
-                  className="flex items-center justify-between p-2 rounded-xl hover:bg-slate-50 dark:hover:bg-dark-950 transition group"
+                <button
+                  onClick={onOpenTomorrowTarget}
+                  className="px-2.5 py-1 rounded-full bg-blue-50 hover:bg-blue-100 dark:bg-blue-950/80 dark:hover:bg-blue-900 text-blue-600 dark:text-blue-300 text-[11px] font-bold transition flex items-center gap-1 cursor-pointer"
                 >
-                  <div className="flex items-center gap-2.5 min-w-0">
+                  <span>+ Add</span>
+                </button>
+              </div>
+
+              {/* Todo Items */}
+              <div className="space-y-2">
+                {todoItems.length === 0 ? (
+                  <div className="py-6 text-center flex flex-col items-center">
+                    <p className="text-xs text-slate-400 font-medium">No targets planned yet.</p>
                     <button
-                      onClick={() => toggleTodo(item.id)}
-                      className={`w-4 h-4 rounded border flex items-center justify-center transition ${
-                        item.completed
-                          ? 'bg-emerald-500 border-emerald-500 text-white'
-                          : 'border-slate-300 dark:border-slate-700 bg-white dark:bg-dark-900 hover:border-blue-400'
-                      }`}
+                      onClick={onOpenTomorrowTarget}
+                      className="mt-1 text-xs font-bold text-blue-600 dark:text-blue-400 hover:underline cursor-pointer"
                     >
-                      {item.completed && <Check size={11} strokeWidth={3} />}
+                      + Add a target
                     </button>
-                    <div className="min-w-0">
-                      <span
-                        className={`text-xs font-semibold block truncate ${
-                          item.completed
-                            ? 'line-through text-slate-400'
-                            : 'text-slate-800 dark:text-slate-200'
-                        }`}
-                      >
-                        {item.title}
-                      </span>
+                  </div>
+                ) : (
+                  todoItems.map((item) => (
+                    <div
+                      key={item.id}
+                      className="flex items-center justify-between p-2 rounded-xl hover:bg-slate-50 dark:hover:bg-dark-950 transition group"
+                    >
+                      <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                        <button
+                          onClick={() => toggleTomorrowTarget(item.id)}
+                          className={`w-4 h-4 rounded border flex items-center justify-center transition cursor-pointer shrink-0 ${
+                            item.completed || item.status === 'Completed'
+                              ? 'bg-emerald-500 border-emerald-500 text-white'
+                              : 'border-slate-300 dark:border-slate-700 bg-white dark:bg-dark-900 hover:border-blue-400'
+                          }`}
+                        >
+                          {(item.completed || item.status === 'Completed') && <Check size={11} strokeWidth={3} />}
+                        </button>
+                        <div
+                          className="min-w-0 cursor-pointer flex-1"
+                          onClick={() => toggleTomorrowTarget(item.id)}
+                          title="Click to toggle completion"
+                        >
+                          <span
+                            className={`text-xs font-semibold block truncate ${
+                              item.completed || item.status === 'Completed'
+                                ? 'line-through text-slate-400'
+                                : 'text-slate-800 dark:text-slate-200 hover:text-blue-600'
+                            }`}
+                          >
+                            {item.title}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-1.5 shrink-0 ml-2">
+                        <span className="text-[10px] text-slate-400 font-medium mono-number">
+                          {item.time || item.startTime || ''}
+                        </span>
+                        <button
+                          onClick={() => {
+                            startStudy({
+                              preparationId: item.preparationId,
+                              subjectId: item.subjectId,
+                              topicId: item.topicId,
+                            });
+                            setActivePage('timer');
+                          }}
+                          className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-blue-50 text-blue-600 dark:bg-blue-950/60 dark:text-blue-300 hover:opacity-80 transition cursor-pointer"
+                          title="Study this target in timer"
+                        >
+                          {item.category || item.tag || 'Study'}
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            removeTomorrowTarget(item.id);
+                          }}
+                          className="p-1 rounded-md text-slate-300 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition opacity-0 group-hover:opacity-100 cursor-pointer"
+                          title="Delete target"
+                        >
+                          <Trash2 size={12} />
+                        </button>
+                      </div>
                     </div>
-                  </div>
+                  ))
+                )}
+              </div>
+            </div>
 
-                  <div className="flex items-center gap-2 shrink-0">
-                    <span className="text-[10px] text-slate-400 font-medium mono-number">
-                      {item.time}
-                    </span>
-                    <button
-                      onClick={() => {
-                        startStudy({
-                          subjectId: item.subjectId,
-                          topicId: item.topicId,
-                        });
-                        setActivePage('timer');
-                      }}
-                      className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${item.tagColor} hover:opacity-80 transition`}
+            {/* 2. Quick Reminders */}
+            <div className="glass-card p-4 sm:p-5">
+              <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800 mb-3">
+                <div className="flex items-center gap-2">
+                  <div className="w-7 h-7 rounded-lg bg-rose-50 dark:bg-rose-950/60 text-rose-500 flex items-center justify-center">
+                    <Bell size={15} />
+                  </div>
+                  <h4 className="text-xs sm:text-sm font-bold text-slate-800 dark:text-slate-100">
+                    Quick Reminders
+                  </h4>
+                </div>
+
+                {notifications && notifications.length > 0 ? (
+                  <button
+                    onClick={clearAllNotifications}
+                    className="text-[11px] font-semibold text-rose-600 dark:text-rose-400 hover:underline cursor-pointer"
+                  >
+                    Clear All
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => setActivePage('notifications')}
+                    className="text-[11px] font-semibold text-blue-600 dark:text-blue-400 hover:underline cursor-pointer"
+                  >
+                    View All
+                  </button>
+                )}
+              </div>
+
+              {/* Reminders List */}
+              <div className="space-y-2.5">
+                {notifications && notifications.length > 0 ? (
+                  notifications.slice(0, 4).map((n) => (
+                    <div
+                      key={n.id}
+                      onClick={() => setActivePage('notifications')}
+                      className="flex items-center justify-between p-1.5 rounded-xl hover:bg-slate-50 dark:hover:bg-dark-950 transition cursor-pointer group"
                     >
-                      {item.tag}
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <div className="w-7 h-7 rounded-full bg-rose-50 dark:bg-rose-950/60 text-rose-500 flex items-center justify-center shrink-0">
+                          <Bell size={13} />
+                        </div>
+                        <div className="min-w-0">
+                          <span className="text-xs font-bold text-slate-800 dark:text-slate-200 block truncate group-hover:text-rose-600 transition-colors">
+                            {n.title || n.message}
+                          </span>
+                          <span className="text-[10px] text-slate-400 block font-medium truncate">
+                            {n.message || 'Reminder'}
+                          </span>
+                        </div>
+                      </div>
+                      <ChevronRight size={14} className="text-slate-300 group-hover:text-slate-600 transition" />
+                    </div>
+                  ))
+                ) : (
+                  <>
+                    <div
+                      onClick={() => setActivePage('timer')}
+                      className="flex items-center justify-between p-1.5 rounded-xl hover:bg-slate-50 dark:hover:bg-dark-950 transition cursor-pointer group"
+                    >
+                      <div className="flex items-center gap-2.5">
+                        <div className="w-7 h-7 rounded-full bg-amber-50 dark:bg-amber-950/60 text-amber-500 flex items-center justify-center shrink-0">
+                          <Clock size={14} />
+                        </div>
+                        <div>
+                          <span className="text-xs font-bold text-slate-800 dark:text-slate-200 block group-hover:text-blue-600 transition-colors">
+                            Pomodoro Focus
+                          </span>
+                          <span className="text-[10px] text-slate-400 block font-medium">
+                            25 min study → 5 min break
+                          </span>
+                        </div>
+                      </div>
+                      <ChevronRight size={14} className="text-slate-300 group-hover:text-slate-600 transition" />
+                    </div>
 
-          {/* 2. Quick Reminders matching screenshot */}
-          <div className="glass-card p-4 sm:p-5">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800 mb-3">
-              <div className="flex items-center gap-2">
-                <div className="w-7 h-7 rounded-lg bg-rose-50 dark:bg-rose-950/60 text-rose-500 flex items-center justify-center">
-                  <Bell size={15} />
-                </div>
-                <h4 className="text-xs sm:text-sm font-bold text-slate-800 dark:text-slate-100">
-                  Quick Reminders
-                </h4>
-              </div>
-
-              <button
-                onClick={() => setActivePage('notifications')}
-                className="text-[11px] font-semibold text-blue-600 dark:text-blue-400 hover:underline"
-              >
-                View All
-              </button>
-            </div>
-
-            {/* Reminders List */}
-            <div className="space-y-2.5">
-              {/* Item 1 */}
-              <div
-                onClick={() => setActivePage('timer')}
-                className="flex items-center justify-between p-1.5 rounded-xl hover:bg-slate-50 dark:hover:bg-dark-950 transition cursor-pointer group"
-              >
-                <div className="flex items-center gap-2.5">
-                  <div className="w-7 h-7 rounded-full bg-amber-50 dark:bg-amber-950/60 text-amber-500 flex items-center justify-center shrink-0">
-                    <Clock size={14} />
-                  </div>
-                  <div>
-                    <span className="text-xs font-bold text-slate-800 dark:text-slate-200 block group-hover:text-blue-600 transition-colors">
-                      30 min study → 15 min break
-                    </span>
-                    <span className="text-[10px] text-slate-400 block font-medium">
-                      Next break at 11:30 AM
-                    </span>
-                  </div>
-                </div>
-                <ChevronRight size={14} className="text-slate-300 group-hover:text-slate-600 transition" />
-              </div>
-
-              {/* Item 2 */}
-              <div
-                onClick={() => setActivePage('targets')}
-                className="flex items-center justify-between p-1.5 rounded-xl hover:bg-slate-50 dark:hover:bg-dark-950 transition cursor-pointer group"
-              >
-                <div className="flex items-center gap-2.5">
-                  <div className="w-7 h-7 rounded-full bg-emerald-50 dark:bg-emerald-950/60 text-emerald-500 flex items-center justify-center shrink-0">
-                    <Target size={14} />
-                  </div>
-                  <div>
-                    <span className="text-xs font-bold text-slate-800 dark:text-slate-200 block group-hover:text-blue-600 transition-colors">
-                      Complete today's target
-                    </span>
-                    <span className="text-[10px] text-slate-400 block font-medium">
-                      You are 60% done
-                    </span>
-                  </div>
-                </div>
-                <ChevronRight size={14} className="text-slate-300 group-hover:text-slate-600 transition" />
-              </div>
-
-              {/* Item 3 */}
-              <div
-                onClick={() => setActivePage('focus')}
-                className="flex items-center justify-between p-1.5 rounded-xl hover:bg-slate-50 dark:hover:bg-dark-950 transition cursor-pointer group"
-              >
-                <div className="flex items-center gap-2.5">
-                  <div className="w-7 h-7 rounded-full bg-rose-50 dark:bg-rose-950/60 text-rose-500 flex items-center justify-center shrink-0">
-                    <Smartphone size={14} />
-                  </div>
-                  <div>
-                    <span className="text-xs font-bold text-slate-800 dark:text-slate-200 block group-hover:text-blue-600 transition-colors">
-                      Keep your phone away
-                    </span>
-                    <span className="text-[10px] text-slate-400 block font-medium">
-                      Stay focused!
-                    </span>
-                  </div>
-                </div>
-                <ChevronRight size={14} className="text-slate-300 group-hover:text-slate-600 transition" />
-              </div>
-
-              {/* Item 4 */}
-              <div className="flex items-center justify-between p-1.5 rounded-xl hover:bg-slate-50 dark:hover:bg-dark-950 transition cursor-pointer group">
-                <div className="flex items-center gap-2.5">
-                  <div className="w-7 h-7 rounded-full bg-amber-50 dark:bg-amber-950/60 text-amber-500 flex items-center justify-center shrink-0">
-                    <Star size={14} />
-                  </div>
-                  <div>
-                    <span className="text-xs font-bold text-slate-800 dark:text-slate-200 block group-hover:text-blue-600 transition-colors">
-                      Believe in yourself
-                    </span>
-                    <span className="text-[10px] text-slate-400 block font-medium">
-                      You can do it!
-                    </span>
-                  </div>
-                </div>
-                <ChevronRight size={14} className="text-slate-300 group-hover:text-slate-600 transition" />
+                    <div
+                      onClick={() => setActivePage('targets')}
+                      className="flex items-center justify-between p-1.5 rounded-xl hover:bg-slate-50 dark:hover:bg-dark-950 transition cursor-pointer group"
+                    >
+                      <div className="flex items-center gap-2.5">
+                        <div className="w-7 h-7 rounded-full bg-emerald-50 dark:bg-emerald-950/60 text-emerald-500 flex items-center justify-center shrink-0">
+                          <Target size={14} />
+                        </div>
+                        <div>
+                          <span className="text-xs font-bold text-slate-800 dark:text-slate-200 block group-hover:text-blue-600 transition-colors">
+                            Daily Study Target
+                          </span>
+                          <span className="text-[10px] text-slate-400 block font-medium">
+                            Target: {formatHoursToShort(todayPlannedHours)}
+                          </span>
+                        </div>
+                      </div>
+                      <ChevronRight size={14} className="text-slate-300 group-hover:text-slate-600 transition" />
+                    </div>
+                  </>
+                )}
               </div>
             </div>
-          </div>
 
-          {/* 3. Recent Activity matching screenshot */}
-          <div className="glass-card p-4 sm:p-5">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800 mb-3">
-              <div className="flex items-center gap-2">
-                <div className="w-7 h-7 rounded-lg bg-blue-50 dark:bg-blue-950/60 text-blue-600 flex items-center justify-center">
-                  <Clock size={15} />
+            {/* 3. Recent Activity */}
+            <div className="glass-card p-4 sm:p-5">
+              <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800 mb-3">
+                <div className="flex items-center gap-2">
+                  <div className="w-7 h-7 rounded-lg bg-blue-50 dark:bg-blue-950/60 text-blue-600 flex items-center justify-center">
+                    <Clock size={15} />
+                  </div>
+                  <h4 className="text-xs sm:text-sm font-bold text-slate-800 dark:text-slate-100">
+                    Recent Activity
+                  </h4>
                 </div>
-                <h4 className="text-xs sm:text-sm font-bold text-slate-800 dark:text-slate-100">
-                  Recent Activity
-                </h4>
+
+                <button
+                  onClick={() => setActivePage('history')}
+                  className="text-[11px] font-semibold text-blue-600 dark:text-blue-400 hover:underline cursor-pointer"
+                >
+                  View All
+                </button>
               </div>
 
-              <button
-                onClick={() => setActivePage('history')}
-                className="text-[11px] font-semibold text-blue-600 dark:text-blue-400 hover:underline"
-              >
-                View All
-              </button>
-            </div>
-
-            {/* Recent Activity Items */}
-            <div className="space-y-2.5">
-              {/* Activity 1 */}
-              <div className="flex items-start justify-between gap-2 p-1.5 rounded-xl hover:bg-slate-50 dark:hover:bg-dark-950 transition">
-                <div className="flex items-start gap-2.5">
-                  <div className="w-6 h-6 rounded-full bg-emerald-50 dark:bg-emerald-950/60 text-emerald-500 flex items-center justify-center shrink-0 mt-0.5">
-                    <CheckCircle2 size={13} />
+              {/* Recent Activity Items */}
+              <div className="space-y-2.5">
+                {sessions.length === 0 ? (
+                  <div className="py-6 text-center flex flex-col items-center">
+                    <p className="text-xs text-slate-400 font-medium">No recent activity yet.</p>
+                    <span className="text-[11px] text-slate-400 mt-0.5">Start a study session to record your progress</span>
                   </div>
-                  <div>
-                    <span className="text-xs font-bold text-slate-800 dark:text-slate-200 block leading-tight">
-                      Study session completed
-                    </span>
-                    <span className="text-[10px] text-slate-400 block font-medium mt-0.5">
-                      React – Components (45m)
-                    </span>
-                  </div>
-                </div>
-                <span className="text-[10px] text-slate-400 font-medium shrink-0 mono-number">
-                  Today 10:12 AM
-                </span>
+                ) : (
+                  sessions.slice(0, 4).map((sess) => {
+                    const sub = subjects.find((s) => s.id === sess.subjectId);
+                    const top = topics.find((t) => t.id === sess.topicId);
+                    return (
+                      <div
+                        key={sess.id}
+                        onClick={() => {
+                          if (sess.subjectId) {
+                            startStudy({ subjectId: sess.subjectId, topicId: sess.topicId });
+                            setActivePage('timer');
+                          } else {
+                            setActivePage('history');
+                          }
+                        }}
+                        className="flex items-start justify-between gap-2 p-1.5 rounded-xl hover:bg-slate-50 dark:hover:bg-dark-950 transition group cursor-pointer"
+                        title="Click to resume study or view history"
+                      >
+                        <div className="flex items-start gap-2.5 min-w-0">
+                          <div className="w-6 h-6 rounded-full bg-emerald-50 dark:bg-emerald-950/60 text-emerald-500 flex items-center justify-center shrink-0 mt-0.5">
+                            <CheckCircle2 size={13} />
+                          </div>
+                          <div className="min-w-0">
+                            <span className="text-xs font-bold text-slate-800 dark:text-slate-200 block leading-tight truncate group-hover:text-blue-600 transition-colors">
+                              {sub?.name || 'Study session'} {top ? `– ${top.name}` : ''}
+                            </span>
+                            <span className="text-[10px] text-slate-400 block font-medium mt-0.5">
+                              Duration: {formatSecondsToShort(sess.actualStudyDuration || 0)}
+                            </span>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <span className="text-[10px] text-slate-400 font-medium mono-number">
+                            {sess.date === todayStr ? 'Today' : sess.date}
+                          </span>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              deleteSession(sess.id);
+                            }}
+                            className="p-1 rounded-md text-slate-300 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition opacity-0 group-hover:opacity-100 cursor-pointer"
+                            title="Delete session"
+                          >
+                            <Trash2 size={12} />
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
               </div>
-
-              {/* Activity 2 */}
-              <div className="flex items-start justify-between gap-2 p-1.5 rounded-xl hover:bg-slate-50 dark:hover:bg-dark-950 transition">
-                <div className="flex items-start gap-2.5">
-                  <div className="w-6 h-6 rounded-full bg-amber-50 dark:bg-amber-950/60 text-amber-500 flex items-center justify-center shrink-0 mt-0.5">
-                    <MapPin size={13} />
-                  </div>
-                  <div>
-                    <span className="text-xs font-bold text-slate-800 dark:text-slate-200 block leading-tight">
-                      Topic added
-                    </span>
-                    <span className="text-[10px] text-slate-400 block font-medium mt-0.5">
-                      Node.js – Express
-                    </span>
-                  </div>
-                </div>
-                <span className="text-[10px] text-slate-400 font-medium shrink-0 mono-number">
-                  Yesterday 08:45 PM
-                </span>
-              </div>
-
-              {/* Activity 3 */}
-              <div className="flex items-start justify-between gap-2 p-1.5 rounded-xl hover:bg-slate-50 dark:hover:bg-dark-950 transition">
-                <div className="flex items-start gap-2.5">
-                  <div className="w-6 h-6 rounded-full bg-purple-50 dark:bg-purple-950/60 text-purple-600 flex items-center justify-center shrink-0 mt-0.5">
-                    <BookOpen size={13} />
-                  </div>
-                  <div>
-                    <span className="text-xs font-bold text-slate-800 dark:text-slate-200 block leading-tight">
-                      New subject created
-                    </span>
-                    <span className="text-[10px] text-slate-400 block font-medium mt-0.5">
-                      MongoDB
-                    </span>
-                  </div>
-                </div>
-                <span className="text-[10px] text-slate-400 font-medium shrink-0 mono-number">
-                  Yesterday 07:20 PM
-                </span>
-              </div>
-            </div>
             </div>
           </div>
         </div>
       </div>
+
+      {/* Confirm Dialog to Clear All Data (Fresh 0 Slate) */}
+      <ConfirmDialog
+        isOpen={isClearModalOpen}
+        onClose={() => setIsClearModalOpen(false)}
+        onConfirm={clearAllData}
+        title="Clear All Dashboard Data?"
+        message="This will reset all study sessions, subjects, topics, and targets back to 0. You can start completely fresh with your own real data."
+        confirmText="Yes, Clear Everything"
+        cancelText="Cancel"
+        isDestructive={true}
+      />
     </div>
   );
 }

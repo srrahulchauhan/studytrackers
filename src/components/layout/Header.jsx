@@ -113,7 +113,7 @@ export function Header({
     }
   };
 
-  const unreadNotifs = notifications.filter((n) => !n.read).length || 3;
+  const unreadNotifs = (notifications || []).filter((n) => !n.read).length;
 
   // Running session details lookup
   const runningSubject = subjects.find((s) => s.id === session.subjectId);

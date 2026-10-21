@@ -266,6 +266,31 @@ export const initialTargets = {
   },
 };
 
+export const freshTargets = {
+  daily: {
+    targetHours: 4,
+    subjectDistribution: [],
+  },
+  tomorrow: [],
+  weekly: {
+    targetHours: 25,
+    dailyPlan: {
+      Monday: 4,
+      Tuesday: 4,
+      Wednesday: 4,
+      Thursday: 4,
+      Friday: 4,
+      Saturday: 4,
+      Sunday: 1,
+    },
+  },
+  monthly: {
+    month: "2026-10",
+    year: 2026,
+    targetHours: 100,
+  },
+};
+
 export const initialSettings = {
   userName: "Rahul Chauhan",
   userRole: "Learner",
