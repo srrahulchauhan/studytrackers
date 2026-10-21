@@ -31,7 +31,7 @@ export const NAV_ITEMS = [
   { id: 'topics', label: 'Topics', icon: Target },
   { id: 'timetable', label: 'Study Timetable', icon: CalendarDays },
   { id: 'timer', label: 'Study Sessions', icon: PlayCircle, hasLiveBadge: true },
-  { id: 'videos', label: 'Notes & Resources', icon: FileText },
+  { id: 'videos', label: 'Video Courses', icon: Video },
   { id: 'revision', label: 'Revision', icon: RotateCcw },
   { id: 'attendance', label: 'Attendance', icon: UserCheck },
   { id: 'analytics', label: 'Reports', icon: BarChart3 },

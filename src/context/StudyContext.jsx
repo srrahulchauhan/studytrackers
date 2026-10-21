@@ -13,6 +13,7 @@ import {
   initialTargets,
   initialTimetable,
   initialTopics,
+  initialVideoCourses,
 } from "../utils/sampleData";
 import {
   clearAllDataToFresh,
@@ -84,6 +85,11 @@ export function StudyProvider({ children }) {
     getStoredItem(STORAGE_KEYS.NOTIFICATIONS, initialNotifications),
   );
 
+  // Video Courses
+  const [videoCourses, setVideoCourses] = useState(() =>
+    getStoredItem(STORAGE_KEYS.VIDEO_COURSES, initialVideoCourses),
+  );
+
   // In-app Toasts
   const [toasts, setToasts] = useState([]);
   const [syncStatus, setSyncStatus] = useState({
@@ -151,6 +157,10 @@ export function StudyProvider({ children }) {
   useEffect(() => {
     setStoredItem(STORAGE_KEYS.NOTIFICATIONS, notifications);
   }, [notifications]);
+
+  useEffect(() => {
+    setStoredItem(STORAGE_KEYS.VIDEO_COURSES, videoCourses);
+  }, [videoCourses]);
 
   useEffect(() => {
     if (!settings.googleSheetsSyncEnabled || !settings.googleSheetsSyncUrl)
@@ -447,6 +457,33 @@ export function StudyProvider({ children }) {
     setTopics((prev) => prev.filter((t) => t.id !== id));
     setTimetable((prev) => prev.filter((t) => t.topicId !== id));
     addToast("Topic removed", "info");
+  };
+
+  // ----------------------------------------------------
+  // VIDEO COURSES CRUD
+  // ----------------------------------------------------
+  const addVideoCourse = (courseData) => {
+    const newCourse = {
+      ...courseData,
+      id: courseData.id || `vid-${Date.now()}`,
+      subtitle: courseData.subtitle || "Video lesson",
+      createdAt: courseData.createdAt || new Date().toISOString(),
+    };
+    setVideoCourses((prev) => [newCourse, ...prev]);
+    addToast(`Video "${newCourse.title}" added!`, "success");
+    return newCourse;
+  };
+
+  const updateVideoCourse = (id, updatedFields) => {
+    setVideoCourses((prev) =>
+      prev.map((c) => (c.id === id ? { ...c, ...updatedFields } : c)),
+    );
+    addToast("Video course updated", "success");
+  };
+
+  const deleteVideoCourse = (id) => {
+    setVideoCourses((prev) => prev.filter((c) => c.id !== id));
+    addToast("Video course removed", "info");
   };
 
   // ----------------------------------------------------
@@ -897,6 +934,11 @@ export function StudyProvider({ children }) {
     completeTopic,
     updateTopicNote,
     deleteTopic,
+
+    videoCourses,
+    addVideoCourse,
+    updateVideoCourse,
+    deleteVideoCourse,
 
     timetable,
     addTimetableSlot,

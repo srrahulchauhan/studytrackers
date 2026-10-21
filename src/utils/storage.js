@@ -11,6 +11,7 @@ import {
   initialTargets,
   initialSettings,
   initialNotifications,
+  initialVideoCourses,
 } from './sampleData';
 
 const STORAGE_KEYS = {
@@ -24,6 +25,7 @@ const STORAGE_KEYS = {
   TARGETS: 'studyflow_targets',
   SETTINGS: 'studyflow_settings',
   NOTIFICATIONS: 'studyflow_notifications',
+  VIDEO_COURSES: 'studyflow_video_courses',
   ACTIVE_PREP_ID: 'studyflow_active_prep_id',
   ACTIVE_SESSION: 'studyflow_active_session',
 };
@@ -105,8 +107,14 @@ export function initializeStorage(force = false) {
     setStoredItem(STORAGE_KEYS.TARGETS, initialTargets);
     setStoredItem(STORAGE_KEYS.SETTINGS, initialSettings);
     setStoredItem(STORAGE_KEYS.NOTIFICATIONS, initialNotifications);
+    setStoredItem(STORAGE_KEYS.VIDEO_COURSES, initialVideoCourses);
     setStoredItem(STORAGE_KEYS.ACTIVE_PREP_ID, 'prep-1');
     localStorage.setItem('studyflow_initialized', 'true');
+  } else {
+    // If initialized previously but VIDEO_COURSES is missing, backfill it
+    if (!localStorage.getItem(STORAGE_KEYS.VIDEO_COURSES)) {
+      setStoredItem(STORAGE_KEYS.VIDEO_COURSES, initialVideoCourses);
+    }
   }
 }
 
@@ -132,6 +140,7 @@ export function clearAllDataToFresh() {
     tomorrow: [],
   });
   setStoredItem(STORAGE_KEYS.NOTIFICATIONS, []);
+  setStoredItem(STORAGE_KEYS.VIDEO_COURSES, []);
   removeStoredItem(STORAGE_KEYS.ACTIVE_SESSION);
 }
 
