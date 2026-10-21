@@ -1,4 +1,3 @@
-import React from 'react';
 import {
   LayoutDashboard,
   Timer,
@@ -9,6 +8,7 @@ import {
   Layers,
   Flame,
   Rocket,
+  ListTodo,
 } from 'lucide-react';
 import { NAV_ITEMS } from './Sidebar';
 import { useStudy } from '../../context/StudyContext';
@@ -22,14 +22,18 @@ export function MobileNav({
   setIsMobileMenuOpen,
   onBackToHub,
 }) {
-  const { activePreparation, notifications, sessions, settings } = useStudy();
+  const { activePreparation, notifications, sessions, settings, todos, targets } = useStudy();
   const { isRunning, isBreak } = useTimer();
+
+  const rawTodos = todos || targets?.tomorrow || [];
+  const pendingTodosCount = rawTodos.filter((t) => !t.completed && t.status !== 'Completed').length;
 
   const unreadNotifs = notifications.filter((n) => !n.read).length;
   const streaks = calculateStudyStreaks(sessions, settings?.minAttendanceMinutes || 30);
 
   const bottomItems = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
+    { id: 'targets', label: 'To-Do', icon: ListTodo, badgeCount: pendingTodosCount },
     { id: 'timer', label: 'Timer', icon: Timer, hasBadge: isRunning || isBreak },
     { id: 'subjects', label: 'Subjects', icon: BookOpen },
     { id: 'timetable', label: 'Schedule', icon: CalendarDays },
@@ -161,6 +165,11 @@ export function MobileNav({
                 <Icon size={19} />
                 {item.hasBadge && (
                   <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-emerald-500 ring-2 ring-white dark:ring-dark-900 animate-ping" />
+                )}
+                {item.badgeCount > 0 && !item.hasBadge && (
+                  <span className="absolute -top-1 -right-1.5 min-w-[14px] h-3.5 px-1 rounded-full bg-amber-500 text-white text-[9px] font-extrabold flex items-center justify-center ring-1 ring-white dark:ring-dark-900">
+                    {item.badgeCount}
+                  </span>
                 )}
               </div>
               <span className="mt-1 text-[10px]">{item.label}</span>

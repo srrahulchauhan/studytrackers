@@ -90,18 +90,20 @@ export function exportStudyDataToExcel({
     'Completed At': top.completedAt || '',
   }));
 
-  // Sheet 5: Planned Tasks & Targets
+  // Sheet 5: Planned Tasks & To-Do List
   const tasksData = (targets.tomorrow || []).map((tar) => ({
     'Task Title': tar.title || 'Study Task',
+    Time: tar.time || '',
+    Category: tar.category || 'Study',
     Preparation: prepMap[tar.preparationId] || 'General',
     Subject: subMap[tar.subjectId] || 'General',
     Topic: topicMap[tar.topicId] || 'General',
     'Duration (Mins)': tar.targetDurationMinutes || 60,
-    'Start Time': tar.startTime || '',
     Priority: tar.priority || 'Medium',
     Status: tar.completed || tar.status === 'Completed' ? 'Completed' : 'Pending',
     'Final Status Note': tar.completionNote || '',
     'Completed At': tar.completedAt || '',
+    'Created At': tar.createdAt || '',
   }));
 
   // Sheet 6: Timetable
@@ -194,7 +196,7 @@ export function exportStudyDataToExcel({
   addSheet(attendanceData, 'Attendance');
   addSheet(subjectsData, 'Subjects');
   addSheet(topicsData, 'Topics');
-  addSheet(tasksData, 'Planned Tasks');
+  addSheet(tasksData, 'To-Do & Tasks');
   addSheet(timetableData, 'Timetable');
   addSheet(dailyTargetRows, 'Daily Targets');
   addSheet(weeklyTargetRows, 'Weekly Targets');
@@ -203,5 +205,44 @@ export function exportStudyDataToExcel({
   addSheet(goalsData, 'Goals');
 
   const fileName = `StudyFlow_Export_${filterMode}_${new Date().toISOString().slice(0, 10)}.xlsx`;
+  XLSX.writeFile(wb, fileName);
+}
+
+/**
+ * Dedicated export for To-Do / Planned tasks specifically
+ */
+export function exportTodosToExcel({
+  todos = [],
+  subjects = [],
+  preparations = [],
+  topics = [],
+}) {
+  const prepMap = Object.fromEntries(preparations.map((p) => [p.id, p.name]));
+  const subMap = Object.fromEntries(subjects.map((s) => [s.id, s.name]));
+  const topicMap = Object.fromEntries(topics.map((t) => [t.id, t.name]));
+
+  const rows = todos.map((t, index) => ({
+    '#': index + 1,
+    'Task Title': t.title || 'Untitled Task',
+    Time: t.time || '',
+    Category: t.category || 'Study',
+    Preparation: prepMap[t.preparationId] || 'General',
+    Subject: subMap[t.subjectId] || 'General',
+    Topic: topicMap[t.topicId] || 'General',
+    'Target Duration (Mins)': t.targetDurationMinutes || 60,
+    Priority: t.priority || 'Medium',
+    Status: t.completed || t.status === 'Completed' ? 'Completed' : 'Pending',
+    'Completion Note': t.completionNote || '',
+    'Completed At': t.completedAt || '',
+    'Created At': t.createdAt || '',
+  }));
+
+  const wb = XLSX.utils.book_new();
+  const ws = XLSX.utils.json_to_sheet(
+    rows.length ? rows : [{ Note: 'No To-Do items available' }]
+  );
+  XLSX.utils.book_append_sheet(wb, ws, 'To-Do List');
+
+  const fileName = `StudyFlow_Todos_${new Date().toISOString().slice(0, 10)}.xlsx`;
   XLSX.writeFile(wb, fileName);
 }

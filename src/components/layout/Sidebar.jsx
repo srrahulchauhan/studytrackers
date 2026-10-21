@@ -26,6 +26,7 @@ import { useTimer } from '../../context/TimerContext';
 
 export const NAV_ITEMS = [
   { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
+  { id: 'targets', label: 'To-Do & Targets', icon: ListTodo, isTodo: true },
   { id: 'preparations', label: 'My Courses', icon: Layers },
   { id: 'subjects', label: 'Subjects', icon: BookOpen },
   { id: 'topics', label: 'Topics', icon: Target },
@@ -40,6 +41,10 @@ export const NAV_ITEMS = [
 
 export function Sidebar({ activePage, setActivePage, isCollapsed, setIsCollapsed, onBackToHub }) {
   const { isRunning, isBreak, formattedNetStudyTime } = useTimer();
+  const { todos, targets } = useStudy();
+
+  const rawTodos = todos || targets?.tomorrow || [];
+  const pendingTodosCount = rawTodos.filter((t) => !t.completed && t.status !== 'Completed').length;
 
   const handleNavClick = (itemId) => {
     setActivePage(itemId);
@@ -120,6 +125,12 @@ export function Sidebar({ activePage, setActivePage, isCollapsed, setIsCollapsed
                 {isTimerActive && (
                   <span className="absolute -top-1 -right-1 w-2 h-2 bg-emerald-400 rounded-full ring-2 ring-[#0b132b] animate-ping" />
                 )}
+                {/* To-Do pending count dot on collapsed */}
+                {item.isTodo && pendingTodosCount > 0 && !isTimerActive && (
+                  <span className="lg:hidden absolute -top-1 -right-1.5 w-4 h-4 bg-amber-500 text-white rounded-full text-[9px] font-bold flex items-center justify-center ring-2 ring-[#0b132b]">
+                    {pendingTodosCount}
+                  </span>
+                )}
               </div>
 
               {!isCollapsed && (
@@ -133,10 +144,18 @@ export function Sidebar({ activePage, setActivePage, isCollapsed, setIsCollapsed
                 </span>
               )}
 
+              {/* To-Do pending count badge on expanded */}
+              {!isCollapsed && item.isTodo && pendingTodosCount > 0 && (
+                <span className="hidden lg:inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-extrabold bg-amber-500/20 text-amber-300 border border-amber-500/30 mono-number">
+                  {pendingTodosCount}
+                </span>
+              )}
+
               {/* Tooltip on collapsed / tablet hover */}
               <div className="fixed left-20 ml-2 px-2.5 py-1 bg-slate-900 text-white text-xs font-semibold rounded-lg shadow-xl border border-slate-700/80 pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity z-50 whitespace-nowrap lg:hidden">
                 {item.label}
                 {isTimerActive && ` (${formattedNetStudyTime})`}
+                {item.isTodo && pendingTodosCount > 0 && ` (${pendingTodosCount} pending)`}
               </div>
             </button>
           );

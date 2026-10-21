@@ -2,6 +2,7 @@ import { createContext, useContext, useEffect, useRef, useState } from "react";
 import { evaluateAutoAttendance } from "../utils/attendanceLogic";
 import { getTodayDateString } from "../utils/dateUtils";
 import { syncToGoogleSheets } from "../utils/googleSheetsSync";
+import { exportTodosToExcel } from "../utils/exportExcel";
 import {
   initialAttendance,
   initialGoals,
@@ -750,6 +751,31 @@ export function StudyProvider({ children }) {
     addToast("Target removed", "info");
   };
 
+  const toggleTomorrowTarget = (id) => {
+    const target = (targets.tomorrow || []).find((t) => t.id === id);
+    if (!target) return;
+    if (target.completed || target.status === "Completed") {
+      reopenTomorrowTarget(id);
+    } else {
+      completeTomorrowTarget(id);
+    }
+  };
+
+  const exportTodosAsExcel = () => {
+    try {
+      exportTodosToExcel({
+        todos: targets.tomorrow || [],
+        subjects,
+        preparations,
+        topics,
+      });
+      addToast("To-Do list exported to Excel successfully! 📊", "success");
+    } catch (err) {
+      console.error(err);
+      addToast("Failed to export To-Do list to Excel", "error");
+    }
+  };
+
   // ----------------------------------------------------
   // GOALS CRUD
   // ----------------------------------------------------
@@ -956,15 +982,21 @@ export function StudyProvider({ children }) {
     markAttendanceManual,
 
     targets,
+    todos: targets.tomorrow || [],
     updateDailyTarget,
     updateWeeklyTarget,
     updateMonthlyTarget,
     addTomorrowTarget,
+    addTodo: addTomorrowTarget,
     updateTomorrowTarget,
     completeTomorrowTarget,
     reopenTomorrowTarget,
+    toggleTomorrowTarget,
+    toggleTodo: toggleTomorrowTarget,
     updateTomorrowTargetNote,
     removeTomorrowTarget,
+    deleteTodo: removeTomorrowTarget,
+    exportTodosAsExcel,
 
     goals,
     addGoal,

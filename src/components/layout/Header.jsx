@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Menu,
   Search,
@@ -11,6 +11,15 @@ import {
   Calendar,
   Home,
   ChevronDown,
+  ListTodo,
+  Check,
+  Plus,
+  Trash2,
+  FileSpreadsheet,
+  RefreshCw,
+  ExternalLink,
+  X,
+  Sparkles,
 } from 'lucide-react';
 import { useStudy } from '../../context/StudyContext';
 import { useTimer } from '../../context/TimerContext';
@@ -27,6 +36,14 @@ export function Header({
     notifications,
     settings,
     subjects,
+    todos,
+    targets,
+    addTomorrowTarget,
+    toggleTomorrowTarget,
+    removeTomorrowTarget,
+    exportTodosAsExcel,
+    syncNow,
+    syncStatus,
   } = useStudy();
 
   const {
@@ -51,6 +68,50 @@ export function Header({
     const interval = setInterval(() => setCurrentTime(Date.now()), 1000);
     return () => clearInterval(interval);
   }, []);
+
+  const [isTodoMenuOpen, setIsTodoMenuOpen] = useState(false);
+  const [quickTodoTitle, setQuickTodoTitle] = useState('');
+  const [isSyncingSheets, setIsSyncingSheets] = useState(false);
+  const todoMenuRef = useRef(null);
+
+  const rawTodos = todos || targets?.tomorrow || [];
+  const pendingTodos = rawTodos.filter((t) => !t.completed && t.status !== 'Completed');
+  const pendingCount = pendingTodos.length;
+
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (todoMenuRef.current && !todoMenuRef.current.contains(e.target)) {
+        setIsTodoMenuOpen(false);
+      }
+    };
+    if (isTodoMenuOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [isTodoMenuOpen]);
+
+  const handleQuickAddTodo = (e) => {
+    e.preventDefault();
+    if (!quickTodoTitle.trim()) return;
+    addTomorrowTarget({
+      title: quickTodoTitle.trim(),
+      priority: 'High',
+      targetDurationMinutes: 45,
+      category: 'Study',
+    });
+    setQuickTodoTitle('');
+  };
+
+  const handleSyncToSheets = async () => {
+    setIsSyncingSheets(true);
+    try {
+      await syncNow();
+    } catch (err) {
+      // toast shown in syncNow
+    } finally {
+      setIsSyncingSheets(false);
+    }
+  };
 
   const unreadNotifs = notifications.filter((n) => !n.read).length || 3;
 
@@ -150,8 +211,181 @@ export function Header({
         </div>
       )}
 
-      {/* Right side: Date Pill, Clock Pill, Bell, Theme Slider, Avatar */}
-      <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+      {/* Right side: To-Do Menu Controller, Date Pill, Clock Pill, Bell, Theme Slider, Avatar */}
+      <div className="flex items-center gap-2 sm:gap-2.5 shrink-0">
+        {/* To-Do Quick Controller Menu Button */}
+        <div className="relative" ref={todoMenuRef}>
+          <button
+            onClick={() => setIsTodoMenuOpen(!isTodoMenuOpen)}
+            className={`flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl border text-xs font-bold transition shadow-xs cursor-pointer ${
+              isTodoMenuOpen
+                ? 'bg-blue-600 text-white border-blue-600 shadow-md shadow-blue-500/25 ring-2 ring-blue-400/30'
+                : 'bg-[#f0f4fa] dark:bg-dark-950 border-slate-200/70 dark:border-slate-800 text-slate-700 dark:text-slate-200 hover:border-blue-400 hover:text-blue-600 dark:hover:text-blue-400'
+            }`}
+            title="To-Do Task Controller (Add, Excel, Sheets)"
+          >
+            <ListTodo size={15} className={isTodoMenuOpen ? 'text-white' : 'text-blue-600 dark:text-blue-400'} />
+            <span className="hidden md:inline">To-Do</span>
+            {pendingCount > 0 && (
+              <span
+                className={`px-1.5 py-0.2 rounded-full text-[10px] font-extrabold mono-number ${
+                  isTodoMenuOpen
+                    ? 'bg-white text-blue-700'
+                    : 'bg-amber-500 text-white'
+                }`}
+              >
+                {pendingCount}
+              </span>
+            )}
+          </button>
+
+          {/* To-Do Quick Popover Dropdown Panel */}
+          {isTodoMenuOpen && (
+            <div className="absolute right-0 sm:right-auto sm:left-0 mt-2 w-80 sm:w-96 bg-white dark:bg-dark-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-2xl z-50 overflow-hidden animate-scale-in">
+              {/* Header */}
+              <div className="p-3.5 bg-gradient-to-r from-blue-600 to-indigo-600 text-white flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="w-7 h-7 rounded-lg bg-white/15 flex items-center justify-center">
+                    <ListTodo size={16} />
+                  </div>
+                  <div>
+                    <h3 className="font-bold text-xs sm:text-sm leading-tight">My Study To-Dos</h3>
+                    <p className="text-[10px] text-blue-100">
+                      {pendingCount} pending • {rawTodos.length} total tasks
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setIsTodoMenuOpen(false)}
+                  className="p-1 rounded-lg hover:bg-white/20 transition text-white/80 hover:text-white"
+                >
+                  <X size={15} />
+                </button>
+              </div>
+
+              {/* Quick Add Input Bar */}
+              <form onSubmit={handleQuickAddTodo} className="p-2.5 border-b border-slate-100 dark:border-slate-800 bg-slate-50/70 dark:bg-dark-950/50">
+                <div className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    value={quickTodoTitle}
+                    onChange={(e) => setQuickTodoTitle(e.target.value)}
+                    placeholder="+ Add new task & press Enter..."
+                    className="flex-1 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-dark-900 text-xs text-slate-800 dark:text-slate-100 placeholder-slate-400 outline-none focus:border-blue-500"
+                  />
+                  <button
+                    type="submit"
+                    disabled={!quickTodoTitle.trim()}
+                    className="px-3 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-xs font-bold transition flex items-center gap-1 shrink-0"
+                  >
+                    <Plus size={13} />
+                    <span>Add</span>
+                  </button>
+                </div>
+              </form>
+
+              {/* Tasks List */}
+              <div className="max-h-64 overflow-y-auto p-2 space-y-1.5 custom-dark-scroll">
+                {rawTodos.length === 0 ? (
+                  <div className="py-6 text-center text-xs text-slate-400">
+                    <p>No tasks yet. Type above to add your first To-Do!</p>
+                  </div>
+                ) : (
+                  rawTodos.map((task) => {
+                    const isDone = task.completed || task.status === 'Completed';
+                    return (
+                      <div
+                        key={task.id}
+                        className={`flex items-center justify-between p-2 rounded-xl transition ${
+                          isDone
+                            ? 'bg-slate-50/50 dark:bg-dark-950/30 opacity-70'
+                            : 'bg-white dark:bg-dark-900 hover:bg-slate-50 dark:hover:bg-dark-950 border border-slate-100 dark:border-slate-800'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2 min-w-0 flex-1">
+                          <button
+                            type="button"
+                            onClick={() => toggleTomorrowTarget(task.id)}
+                            className={`w-4 h-4 rounded border flex items-center justify-center transition shrink-0 ${
+                              isDone
+                                ? 'bg-emerald-500 border-emerald-500 text-white'
+                                : 'border-slate-300 dark:border-slate-600 hover:border-blue-500 bg-white dark:bg-dark-900'
+                            }`}
+                          >
+                            {isDone && <Check size={11} strokeWidth={3} />}
+                          </button>
+                          <span
+                            className={`text-xs block truncate ${
+                              isDone
+                                ? 'line-through text-slate-400'
+                                : 'text-slate-800 dark:text-slate-200 font-medium'
+                            }`}
+                          >
+                            {task.title}
+                          </span>
+                        </div>
+
+                        <div className="flex items-center gap-1.5 shrink-0 ml-2">
+                          {task.time && (
+                            <span className="text-[10px] text-slate-400 mono-number hidden sm:inline">
+                              {task.time}
+                            </span>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => removeTomorrowTarget(task.id)}
+                            className="p-1 text-slate-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-lg transition"
+                            title="Delete task"
+                          >
+                            <Trash2 size={12} />
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+
+              {/* Bottom Action Footer: Excel Export + Google Sheets Sync + Full View */}
+              <div className="p-2.5 bg-slate-50 dark:bg-dark-950 border-t border-slate-100 dark:border-slate-800 flex flex-wrap items-center justify-between gap-1.5">
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={exportTodosAsExcel}
+                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/60 dark:hover:bg-emerald-900/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 text-[11px] font-bold transition"
+                    title="Export To-Dos to Excel (.xlsx)"
+                  >
+                    <FileSpreadsheet size={13} />
+                    <span>Excel</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleSyncToSheets}
+                    disabled={isSyncingSheets}
+                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/60 dark:hover:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 text-[11px] font-bold transition disabled:opacity-50"
+                    title="Sync To-Dos to Google Sheets"
+                  >
+                    <RefreshCw size={12} className={isSyncingSheets ? 'animate-spin' : ''} />
+                    <span>{isSyncingSheets ? 'Syncing...' : 'Sheets'}</span>
+                  </button>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsTodoMenuOpen(false);
+                    setActivePage('targets');
+                  }}
+                  className="text-xs font-bold text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-0.5"
+                >
+                  <span>All Targets</span>
+                  <ExternalLink size={11} />
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+
         {/* Date pill */}
         <div
           onClick={() => setActivePage('calendar')}
@@ -170,7 +404,7 @@ export function Header({
           </span>
         </div>
 
-        {/* Notification Bell with red badge '3' */}
+        {/* Notification Bell */}
         <button
           onClick={() => setActivePage('notifications')}
           className="p-2 rounded-xl text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition relative"
