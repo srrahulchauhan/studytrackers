@@ -5,7 +5,7 @@ const ThemeContext = createContext();
 
 export function ThemeProvider({ children }) {
   const [theme, setTheme] = useState(() => {
-    return getStoredItem('studyflow_theme', 'dark');
+    return getStoredItem('studyflow_theme', 'light');
   });
 
   useEffect(() => {

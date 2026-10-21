@@ -41,7 +41,9 @@ const SettingsPage = lazy(() => import('./pages/SettingsPage').then((m) => ({ de
 
 function StudyFlowContent({ onBackToHub }) {
   const [activePage, setActivePage] = useState('dashboard');
-  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(
+    () => typeof window !== 'undefined' && window.innerWidth >= 768 && window.innerWidth < 1024
+  );
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   // Global modals
@@ -58,6 +60,21 @@ function StudyFlowContent({ onBackToHub }) {
 
   // Selected subject filter to pass into Topics page
   const [selectedSubjectIdForTopics, setSelectedSubjectIdForTopics] = useState(null);
+
+  // Responsive sidebar collapse: on tablet (768px-1023px) default to collapsed (icon-only), on desktop expanded
+  useEffect(() => {
+    const handleResize = () => {
+      const width = window.innerWidth;
+      if (width >= 768 && width < 1024) {
+        setIsSidebarCollapsed(true);
+      } else if (width >= 1024) {
+        // Desktop retains expanded view unless toggled
+      }
+    };
+    handleResize();
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   // Keyboard shortcut Ctrl/Cmd + K for Global Search
   useEffect(() => {
@@ -98,7 +115,7 @@ function StudyFlowContent({ onBackToHub }) {
   }
 
   return (
-    <div className="flex h-screen w-full bg-slate-50 dark:bg-dark-950 text-slate-900 dark:text-slate-100 overflow-hidden font-sans">
+    <div className="flex h-screen w-full bg-[#f4f7fc] dark:bg-dark-950 text-slate-900 dark:text-slate-100 overflow-hidden font-sans">
       {/* Desktop Sidebar */}
       <Sidebar
         activePage={activePage}
@@ -118,7 +135,7 @@ function StudyFlowContent({ onBackToHub }) {
       />
 
       {/* Main Workspace Area */}
-      <div className="flex-1 flex flex-col min-w-0 h-full overflow-hidden">
+      <div className="flex-1 flex flex-col min-w-0 h-full overflow-hidden bg-[#f4f7fc] dark:bg-dark-950">
         {/* Top Header */}
         <Header
           onOpenMobileMenu={() => setIsMobileMenuOpen(true)}
@@ -129,7 +146,7 @@ function StudyFlowContent({ onBackToHub }) {
         />
 
         {/* Scrollable Page Content */}
-        <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 pb-24 lg:pb-12">
+        <main className={`flex-1 overflow-y-auto ${activePage === 'revision' ? 'p-3 sm:p-4 lg:p-4 pb-3 lg:pb-4' : 'p-4 sm:p-5 lg:p-6 pb-24 lg:pb-12'}`}>
           <Suspense
             fallback={
               <div className="flex h-full w-full items-center justify-center">
@@ -137,7 +154,7 @@ function StudyFlowContent({ onBackToHub }) {
               </div>
             }
           >
-            <div className="max-w-7xl mx-auto">
+            <div className="w-full mx-auto">
               {activePage === 'dashboard' && (
                 <DashboardPage
                   setActivePage={setActivePage}

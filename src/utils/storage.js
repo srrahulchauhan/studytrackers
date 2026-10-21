@@ -73,8 +73,8 @@ export function removeStoredItem(key) {
  * Initialize storage with clean data if first time
  */
 export function initializeStorage(force = false) {
-  // If the browser previously stored legacy mock/demo data, clear it so user gets a fresh workspace
-  const isCleaned = localStorage.getItem('studyflow_clean_v3');
+  // Ensure the app initializes with the reference dashboard data
+  const isCleaned = localStorage.getItem('studyflow_mockup_v1');
   if (!isCleaned) {
     localStorage.removeItem(STORAGE_KEYS.PREPARATIONS);
     localStorage.removeItem(STORAGE_KEYS.SUBJECTS);
@@ -88,7 +88,7 @@ export function initializeStorage(force = false) {
     localStorage.removeItem(STORAGE_KEYS.ACTIVE_PREP_ID);
     localStorage.removeItem(STORAGE_KEYS.ACTIVE_SESSION);
     localStorage.removeItem('studyflow_initialized');
-    localStorage.setItem('studyflow_clean_v3', 'true');
+    localStorage.setItem('studyflow_mockup_v1', 'true');
     force = true;
   }
 
@@ -105,7 +105,7 @@ export function initializeStorage(force = false) {
     setStoredItem(STORAGE_KEYS.TARGETS, initialTargets);
     setStoredItem(STORAGE_KEYS.SETTINGS, initialSettings);
     setStoredItem(STORAGE_KEYS.NOTIFICATIONS, initialNotifications);
-    setStoredItem(STORAGE_KEYS.ACTIVE_PREP_ID, '');
+    setStoredItem(STORAGE_KEYS.ACTIVE_PREP_ID, 'prep-1');
     localStorage.setItem('studyflow_initialized', 'true');
   }
 }
