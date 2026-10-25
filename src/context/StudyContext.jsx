@@ -2,7 +2,11 @@ import { createContext, useContext, useEffect, useRef, useState } from "react";
 import { evaluateAutoAttendance } from "../utils/attendanceLogic";
 import { getTodayDateString } from "../utils/dateUtils";
 import { syncToGoogleSheets } from "../utils/googleSheetsSync";
-import { exportTodosToExcel } from "../utils/exportExcel";
+import {
+  exportTodosToExcel,
+  exportStudyDataToExcel,
+  exportDateWiseStudyReportToExcel,
+} from "../utils/exportExcel";
 import {
   freshTargets,
   initialAttendance,
@@ -777,6 +781,51 @@ export function StudyProvider({ children }) {
     }
   };
 
+  const downloadAllDataAsExcel = (filterOptions = {}) => {
+    try {
+      exportStudyDataToExcel({
+        preparations,
+        subjects,
+        topics,
+        timetable,
+        sessions,
+        attendance,
+        targets,
+        goals,
+        filterMode: filterOptions.filterMode || "all",
+        startDate: filterOptions.startDate,
+        endDate: filterOptions.endDate,
+      });
+      addToast("Complete StudyFlow Excel workbook (.xlsx) downloaded! 📊", "success");
+      return true;
+    } catch (err) {
+      console.error(err);
+      addToast("Failed to export Excel workbook: " + err.message, "error");
+      return false;
+    }
+  };
+
+  const downloadDateWiseExcel = (filterOptions = {}) => {
+    try {
+      const res = exportDateWiseStudyReportToExcel({
+        sessions,
+        subjects,
+        topics,
+        attendance,
+        preparations,
+        filterMode: filterOptions.filterMode || "all",
+        startDate: filterOptions.startDate,
+        endDate: filterOptions.endDate,
+      });
+      addToast(`Date-wise Excel report (${res.count} sessions) downloaded! 📊`, "success");
+      return res;
+    } catch (err) {
+      console.error(err);
+      addToast("Failed to download date-wise Excel report: " + err.message, "error");
+      return false;
+    }
+  };
+
   // ----------------------------------------------------
   // GOALS CRUD
   // ----------------------------------------------------
@@ -992,6 +1041,9 @@ export function StudyProvider({ children }) {
     removeTomorrowTarget,
     deleteTodo: removeTomorrowTarget,
     exportTodosAsExcel,
+    downloadAllDataAsExcel,
+    downloadDateWiseExcel,
+    logManualSession: addSession,
 
     goals,
     addGoal,

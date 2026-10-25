@@ -8,12 +8,16 @@ import {
   Sparkles,
   Sun,
   Trash2,
+  Copy,
+  Check,
+  ExternalLink,
 } from "lucide-react";
 import { useState } from "react";
 import { ConfirmDialog } from "../components/common/ConfirmDialog";
 import { useStudy } from "../context/StudyContext";
 import { useTheme } from "../context/ThemeContext";
 import { useTimer } from "../context/TimerContext";
+import { GOOGLE_APPS_SCRIPT_TEMPLATE } from "../utils/googleSheetsSync";
 
 export function SettingsPage() {
   const {
@@ -31,6 +35,14 @@ export function SettingsPage() {
   const [isClearDataConfirmOpen, setIsClearDataConfirmOpen] = useState(false);
   const [isResetSampleConfirmOpen, setIsResetSampleConfirmOpen] =
     useState(false);
+  const [copiedScript, setCopiedScript] = useState(false);
+
+  const handleCopyScript = () => {
+    navigator.clipboard.writeText(GOOGLE_APPS_SCRIPT_TEMPLATE);
+    setCopiedScript(true);
+    addToast("Apps Script template copied to clipboard! 📋", "success");
+    setTimeout(() => setCopiedScript(false), 2500);
+  };
 
   const [form, setForm] = useState({
     dailyTargetHours: settings?.dailyTargetHours || 4,
@@ -268,6 +280,34 @@ export function SettingsPage() {
                 />
                 <span>{syncStatus.isSyncing ? "Syncing" : "Sync now"}</span>
               </button>
+            </div>
+
+            {/* Apps Script Code Copy & Guide */}
+            <div className="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-dark-950/50 space-y-2.5">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-slate-800 dark:text-slate-200">
+                  Google Apps Script Deployment Code
+                </span>
+                <button
+                  type="button"
+                  onClick={handleCopyScript}
+                  className="px-3 py-1.5 rounded-lg bg-white dark:bg-dark-900 border border-slate-200 dark:border-slate-700 hover:border-emerald-500 text-slate-700 dark:text-slate-200 text-xs font-bold flex items-center gap-1.5 transition"
+                >
+                  {copiedScript ? (
+                    <Check size={13} className="text-emerald-500" />
+                  ) : (
+                    <Copy size={13} />
+                  )}
+                  <span>{copiedScript ? "Copied!" : "Copy Script Code"}</span>
+                </button>
+              </div>
+              <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed">
+                1. Open <a href="https://sheets.new" target="_blank" rel="noreferrer" className="text-blue-500 font-bold hover:underline inline-flex items-center gap-0.5">sheets.new <ExternalLink size={10} /></a> &gt; Extensions &gt; Apps Script.
+                <br />
+                2. Paste the copied code, click <strong>Deploy &gt; New deployment &gt; Web app</strong>.
+                <br />
+                3. Choose <strong>Execute as: "Me"</strong>, <strong>Who has access: "Anyone"</strong>, then paste your Web App URL above!
+              </p>
             </div>
           </div>
         </div>

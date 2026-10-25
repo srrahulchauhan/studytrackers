@@ -35,7 +35,7 @@ export const NAV_ITEMS = [
   { id: 'videos', label: 'Video Courses', icon: Video },
   { id: 'revision', label: 'Revision', icon: RotateCcw },
   { id: 'attendance', label: 'Attendance', icon: UserCheck },
-  { id: 'analytics', label: 'Reports', icon: BarChart3 },
+  { id: 'analytics', label: 'Reports & Analytics', icon: BarChart3 },
   { id: 'settings', label: 'Settings', icon: Settings },
 ];
 
