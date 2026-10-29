@@ -1,23 +1,17 @@
 import {
-  Database,
   Moon,
-  RefreshCw,
   RotateCcw,
   Save,
   Settings as SettingsIcon,
   Sparkles,
   Sun,
   Trash2,
-  Copy,
-  Check,
-  ExternalLink,
 } from "lucide-react";
 import { useState } from "react";
 import { ConfirmDialog } from "../components/common/ConfirmDialog";
 import { useStudy } from "../context/StudyContext";
 import { useTheme } from "../context/ThemeContext";
 import { useTimer } from "../context/TimerContext";
-import { GOOGLE_APPS_SCRIPT_TEMPLATE } from "../utils/googleSheetsSync";
 
 export function SettingsPage() {
   const {
@@ -26,8 +20,6 @@ export function SettingsPage() {
     clearAllData,
     resetToSampleData,
     addToast,
-    syncStatus,
-    syncNow,
   } = useStudy();
   const { theme, toggleTheme } = useTheme();
   const { resetTimer } = useTimer();
@@ -35,14 +27,6 @@ export function SettingsPage() {
   const [isClearDataConfirmOpen, setIsClearDataConfirmOpen] = useState(false);
   const [isResetSampleConfirmOpen, setIsResetSampleConfirmOpen] =
     useState(false);
-  const [copiedScript, setCopiedScript] = useState(false);
-
-  const handleCopyScript = () => {
-    navigator.clipboard.writeText(GOOGLE_APPS_SCRIPT_TEMPLATE);
-    setCopiedScript(true);
-    addToast("Apps Script template copied to clipboard! 📋", "success");
-    setTimeout(() => setCopiedScript(false), 2500);
-  };
 
   const [form, setForm] = useState({
     dailyTargetHours: settings?.dailyTargetHours || 4,
@@ -56,9 +40,6 @@ export function SettingsPage() {
     timeFormat: settings?.timeFormat || "12h",
     weekStartDay: settings?.weekStartDay || "Monday",
     browserNotifications: settings?.browserNotifications || false,
-    googleSheetsSyncEnabled: settings?.googleSheetsSyncEnabled || false,
-    googleSheetsSyncUrl: settings?.googleSheetsSyncUrl || "",
-    googleSheetsSyncKey: settings?.googleSheetsSyncKey || "",
   });
 
   const handleSave = (e) => {
@@ -77,19 +58,8 @@ export function SettingsPage() {
       timeFormat: form.timeFormat,
       weekStartDay: form.weekStartDay,
       browserNotifications: form.browserNotifications,
-      googleSheetsSyncEnabled: form.googleSheetsSyncEnabled,
-      googleSheetsSyncUrl: form.googleSheetsSyncUrl.trim(),
-      googleSheetsSyncKey: form.googleSheetsSyncKey.trim(),
     });
-    addToast("Preferences and settings saved!", "success");
-  };
-
-  const handleSyncNow = async () => {
-    try {
-      await syncNow();
-    } catch (error) {
-      // Error is already displayed to the user.
-    }
+    addToast("Settings saved successfully! ✨", "success");
   };
 
   return (
@@ -184,130 +154,6 @@ export function SettingsPage() {
               <span className="text-[11px] text-slate-400 mt-1 block">
                 Preset time for new timer sessions
               </span>
-            </div>
-          </div>
-        </div>
-
-        {/* Google Sheets Sync */}
-        <div className="glass-card p-6 space-y-4">
-          <div className="flex items-center justify-between gap-4 pb-2 border-b border-slate-100 dark:border-slate-800">
-            <div className="flex items-center gap-2">
-              <Database className="text-emerald-500" size={18} />
-              <div>
-                <h3 className="text-sm font-bold text-slate-900 dark:text-white">
-                  Live Google Sheets Sync
-                </h3>
-                <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                  Save the complete study workspace to your linked sheet.
-                </p>
-              </div>
-            </div>
-            <label className="relative inline-flex items-center cursor-pointer">
-              <input
-                type="checkbox"
-                checked={form.googleSheetsSyncEnabled}
-                onChange={(e) =>
-                  setForm({
-                    ...form,
-                    googleSheetsSyncEnabled: e.target.checked,
-                  })
-                }
-                className="sr-only peer"
-              />
-              <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-600" />
-            </label>
-          </div>
-
-          <div className="space-y-3">
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
-                Apps Script Web App URL
-              </label>
-              <input
-                type="url"
-                value={form.googleSheetsSyncUrl}
-                onChange={(e) =>
-                  setForm({ ...form, googleSheetsSyncUrl: e.target.value })
-                }
-                placeholder="https://script.google.com/macros/s/.../exec"
-                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-dark-950 text-sm text-slate-900 dark:text-white outline-none"
-              />
-              <p className="text-[11px] text-slate-400 mt-1">
-                Create this endpoint from the Apps Script included with the
-                project.
-              </p>
-            </div>
-
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
-                Optional Sync Key
-              </label>
-              <input
-                type="password"
-                value={form.googleSheetsSyncKey}
-                onChange={(e) =>
-                  setForm({ ...form, googleSheetsSyncKey: e.target.value })
-                }
-                placeholder="Only needed if enabled in Apps Script"
-                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-dark-950 text-sm text-slate-900 dark:text-white outline-none"
-              />
-            </div>
-
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-dark-950/60 p-3">
-              <div>
-                <p className="text-xs font-semibold text-slate-900 dark:text-white">
-                  Sync status
-                </p>
-                <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                  {syncStatus.isSyncing
-                    ? "Syncing…"
-                    : syncStatus.lastSyncedAt
-                      ? `Last synced: ${new Date(syncStatus.lastSyncedAt).toLocaleString()}`
-                      : syncStatus.error
-                        ? `Last error: ${syncStatus.error}`
-                        : "Not synced yet"}
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={handleSyncNow}
-                disabled={syncStatus.isSyncing}
-                className="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-60 text-white text-xs font-semibold flex items-center gap-1.5 transition"
-              >
-                <RefreshCw
-                  size={14}
-                  className={syncStatus.isSyncing ? "animate-spin" : ""}
-                />
-                <span>{syncStatus.isSyncing ? "Syncing" : "Sync now"}</span>
-              </button>
-            </div>
-
-            {/* Apps Script Code Copy & Guide */}
-            <div className="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-dark-950/50 space-y-2.5">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-slate-800 dark:text-slate-200">
-                  Google Apps Script Deployment Code
-                </span>
-                <button
-                  type="button"
-                  onClick={handleCopyScript}
-                  className="px-3 py-1.5 rounded-lg bg-white dark:bg-dark-900 border border-slate-200 dark:border-slate-700 hover:border-emerald-500 text-slate-700 dark:text-slate-200 text-xs font-bold flex items-center gap-1.5 transition"
-                >
-                  {copiedScript ? (
-                    <Check size={13} className="text-emerald-500" />
-                  ) : (
-                    <Copy size={13} />
-                  )}
-                  <span>{copiedScript ? "Copied!" : "Copy Script Code"}</span>
-                </button>
-              </div>
-              <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed">
-                1. Open <a href="https://sheets.new" target="_blank" rel="noreferrer" className="text-blue-500 font-bold hover:underline inline-flex items-center gap-0.5">sheets.new <ExternalLink size={10} /></a> &gt; Extensions &gt; Apps Script.
-                <br />
-                2. Paste the copied code, click <strong>Deploy &gt; New deployment &gt; Web app</strong>.
-                <br />
-                3. Choose <strong>Execute as: "Me"</strong>, <strong>Who has access: "Anyone"</strong>, then paste your Web App URL above!
-              </p>
             </div>
           </div>
         </div>
@@ -570,6 +416,8 @@ export function SettingsPage() {
         confirmText="Yes, Load Demo Data"
         isDestructive={false}
       />
+
+      
     </div>
   );
 }

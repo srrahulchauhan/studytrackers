@@ -18,7 +18,7 @@ test("builds a Google Sheets payload with a stable client record", () => {
   assert.equal(payload.data.preparations[0].name, "Physics");
   assert.equal(payload.data.sessions[0].actualStudyDuration, 1800);
   assert.ok(payload.meta.syncedAt);
-  assert.equal(payload.meta.version, "1.0.0");
+  assert.equal(payload.meta.version, "2.5.0");
 });
 
 test("drops unsupported fields and keeps a safe payload shape", () => {

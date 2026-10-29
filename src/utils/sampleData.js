@@ -309,8 +309,8 @@ export const initialSettings = {
   timeFormat: "12h",
   weekStartDay: "Monday",
   browserNotifications: false,
-  googleSheetsSyncEnabled: false,
-  googleSheetsSyncUrl: "",
+  googleSheetsSyncEnabled: true,
+  googleSheetsSyncUrl: "https://script.google.com/macros/s/AKfycbzjemNaSsfS4AhMoTcwpGSHqitVqZsMXqRULhWMio2AjUBjKquaS-RBiAebyYX9pGk/exec",
   googleSheetsSyncKey: "",
 };
 

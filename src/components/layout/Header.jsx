@@ -30,6 +30,8 @@ export function Header({
     subjects,
   } = useStudy();
 
+
+
   const {
     session,
     isRunning,
@@ -155,7 +157,6 @@ export function Header({
 
       {/* Right side: To-Do Menu Controller, Date Pill, Clock Pill, Bell, Theme Slider, Avatar */}
       <div className="flex items-center gap-2 sm:gap-2.5 shrink-0">
-
 
         {/* Date pill */}
         <div

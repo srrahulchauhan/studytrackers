@@ -1,7 +1,20 @@
 import { createContext, useContext, useEffect, useRef, useState } from "react";
 import { evaluateAutoAttendance } from "../utils/attendanceLogic";
 import { getTodayDateString } from "../utils/dateUtils";
-import { syncToGoogleSheets } from "../utils/googleSheetsSync";
+import {
+  syncToGoogleSheets,
+  testGoogleSheetsConnection,
+  DEFAULT_SYNC_URL,
+} from "../utils/googleSheetsSync";
+import {
+  getAllRecords,
+  upsertRecord,
+  deleteRecord,
+  syncPendingChanges,
+  getPendingOutbox,
+  checkHealth,
+  getSpreadsheetDownloadUrl,
+} from "../services/googleSheetsApi";
 import {
   exportTodosToExcel,
   exportStudyDataToExcel,
@@ -82,9 +95,23 @@ export function StudyProvider({ children }) {
   );
 
   // Settings
-  const [settings, setSettings] = useState(() =>
-    getStoredItem(STORAGE_KEYS.SETTINGS, initialSettings),
-  );
+  const [settings, setSettings] = useState(() => {
+    const stored = getStoredItem(STORAGE_KEYS.SETTINGS, initialSettings);
+    if (
+      !stored ||
+      !stored.googleSheetsSyncUrl ||
+      stored.googleSheetsSyncUrl.includes("AKfycbxmpxf3QDwch3IaIwDRdzGo6-c5C8cANkY7ABIiKzyz9JDb2FeJodO-w_NEFmebVMg") ||
+      stored.googleSheetsSyncUrl.includes("AKfycbzSVX2T-imPYZQ75__Yg7wvf06t9OIPKg9xooIVb8AJfWE8Nc9fbxnXAfKhIVdXUUE")
+    ) {
+      return {
+        ...initialSettings,
+        ...(stored || {}),
+        googleSheetsSyncUrl: DEFAULT_SYNC_URL,
+        googleSheetsSyncEnabled: true,
+      };
+    }
+    return stored;
+  });
 
   // Notifications
   const [notifications, setNotifications] = useState(() =>
@@ -167,6 +194,21 @@ export function StudyProvider({ children }) {
   useEffect(() => {
     setStoredItem(STORAGE_KEYS.VIDEO_COURSES, videoCourses);
   }, [videoCourses]);
+
+  // Startup: flush any pending operations stored in persistent outbox queue
+  useEffect(() => {
+    const drainStartupOutbox = async () => {
+      try {
+        const outbox = getPendingOutbox();
+        if (outbox && outbox.length > 0) {
+          await syncPendingChanges();
+        }
+      } catch (err) {
+        console.warn("Startup outbox sync deferred:", err.message);
+      }
+    };
+    drainStartupOutbox();
+  }, []);
 
   useEffect(() => {
     if (!settings.googleSheetsSyncEnabled || !settings.googleSheetsSyncUrl)
@@ -283,30 +325,42 @@ export function StudyProvider({ children }) {
     };
     setPreparations((prev) => [...prev, newPrep]);
     setActivePrepId(newPrep.id);
+    upsertRecord("preparations", newPrep.id, newPrep);
     addToast(`Preparation "${newPrep.name}" created!`, "success");
     return newPrep;
   };
 
   const updatePreparation = (id, updatedFields) => {
     setPreparations((prev) =>
-      prev.map((p) =>
-        p.id === id
-          ? { ...p, ...updatedFields, updatedAt: new Date().toISOString() }
-          : p,
-      ),
+      prev.map((p) => {
+        if (p.id === id) {
+          const updated = { ...p, ...updatedFields, updatedAt: new Date().toISOString() };
+          upsertRecord("preparations", id, updated);
+          return updated;
+        }
+        return p;
+      }),
     );
     addToast("Preparation updated successfully", "success");
   };
 
   const deletePreparation = (id) => {
     setPreparations((prev) => prev.filter((p) => p.id !== id));
+    deleteRecord("preparations", id);
     // Cascade delete subjects & topics under this prep
     const removedSubjects = subjects.filter((s) => s.preparationId === id);
     const removedSubjectIds = new Set(removedSubjects.map((s) => s.id));
+    removedSubjects.forEach((s) => deleteRecord("subjects", s.id));
     setSubjects((prev) => prev.filter((s) => s.preparationId !== id));
+    topics
+      .filter((t) => removedSubjectIds.has(t.subjectId))
+      .forEach((t) => deleteRecord("topics", t.id));
     setTopics((prev) =>
       prev.filter((t) => !removedSubjectIds.has(t.subjectId)),
     );
+    timetable
+      .filter((t) => t.preparationId === id)
+      .forEach((t) => deleteRecord("timetable", t.id));
     setTimetable((prev) => prev.filter((t) => t.preparationId !== id));
 
     if (activePrepId === id) {
@@ -330,67 +384,87 @@ export function StudyProvider({ children }) {
       updatedAt: new Date().toISOString(),
     };
     setSubjects((prev) => [...prev, newSubject]);
+    upsertRecord("subjects", newSubject.id, newSubject);
     addToast(`Subject "${newSubject.name}" created!`, "success");
     return newSubject;
   };
 
   const updateSubject = (id, updatedFields) => {
     setSubjects((prev) =>
-      prev.map((s) =>
-        s.id === id
-          ? { ...s, ...updatedFields, updatedAt: new Date().toISOString() }
-          : s,
-      ),
+      prev.map((s) => {
+        if (s.id === id) {
+          const updated = { ...s, ...updatedFields, updatedAt: new Date().toISOString() };
+          upsertRecord("subjects", id, updated);
+          return updated;
+        }
+        return s;
+      }),
     );
     addToast("Subject updated", "success");
   };
 
   const deleteSubject = (id) => {
     setSubjects((prev) => prev.filter((s) => s.id !== id));
+    deleteRecord("subjects", id);
+    topics
+      .filter((t) => t.subjectId === id)
+      .forEach((t) => deleteRecord("topics", t.id));
     setTopics((prev) => prev.filter((t) => t.subjectId !== id));
+    timetable
+      .filter((t) => t.subjectId === id)
+      .forEach((t) => deleteRecord("timetable", t.id));
     setTimetable((prev) => prev.filter((t) => t.subjectId !== id));
     addToast("Subject deleted", "info");
   };
 
   const completeSubject = (id, completionNote = "") => {
     setSubjects((prev) =>
-      prev.map((s) =>
-        s.id === id
-          ? {
-              ...s,
-              status: "Completed",
-              completionNote,
-              completedAt: new Date().toISOString(),
-              updatedAt: new Date().toISOString(),
-            }
-          : s,
-      ),
+      prev.map((s) => {
+        if (s.id === id) {
+          const updated = {
+            ...s,
+            status: "Completed",
+            completionNote,
+            completedAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          };
+          upsertRecord("subjects", id, updated);
+          return updated;
+        }
+        return s;
+      }),
     );
     addToast("Subject completed! 🏆", "success");
   };
 
   const reopenSubject = (id) => {
     setSubjects((prev) =>
-      prev.map((s) =>
-        s.id === id
-          ? {
-              ...s,
-              status: "In Progress",
-              updatedAt: new Date().toISOString(),
-            }
-          : s,
-      ),
+      prev.map((s) => {
+        if (s.id === id) {
+          const updated = {
+            ...s,
+            status: "In Progress",
+            updatedAt: new Date().toISOString(),
+          };
+          upsertRecord("subjects", id, updated);
+          return updated;
+        }
+        return s;
+      }),
     );
     addToast("Subject reopened to In Progress", "info");
   };
 
   const updateSubjectNote = (id, completionNote) => {
     setSubjects((prev) =>
-      prev.map((s) =>
-        s.id === id
-          ? { ...s, completionNote, updatedAt: new Date().toISOString() }
-          : s,
-      ),
+      prev.map((s) => {
+        if (s.id === id) {
+          const updated = { ...s, completionNote, updatedAt: new Date().toISOString() };
+          upsertRecord("subjects", id, updated);
+          return updated;
+        }
+        return s;
+      }),
     );
     addToast("Subject final status note updated!", "success");
   };
@@ -408,17 +482,21 @@ export function StudyProvider({ children }) {
       updatedAt: new Date().toISOString(),
     };
     setTopics((prev) => [...prev, newTopic]);
+    upsertRecord("topics", newTopic.id, newTopic);
     addToast(`Topic "${newTopic.name}" added!`, "success");
     return newTopic;
   };
 
   const updateTopic = (id, updatedFields) => {
     setTopics((prev) =>
-      prev.map((t) =>
-        t.id === id
-          ? { ...t, ...updatedFields, updatedAt: new Date().toISOString() }
-          : t,
-      ),
+      prev.map((t) => {
+        if (t.id === id) {
+          const updated = { ...t, ...updatedFields, updatedAt: new Date().toISOString() };
+          upsertRecord("topics", id, updated);
+          return updated;
+        }
+        return t;
+      }),
     );
     addToast("Topic updated", "success");
   };
@@ -438,6 +516,7 @@ export function StudyProvider({ children }) {
         if (status === "Completed") {
           if (!updated.completedAt) updated.completedAt = new Date().toISOString();
         }
+        upsertRecord("topics", id, updated);
         return updated;
       }),
     );
@@ -450,17 +529,24 @@ export function StudyProvider({ children }) {
 
   const updateTopicNote = (id, completionNote) => {
     setTopics((prev) =>
-      prev.map((t) =>
-        t.id === id
-          ? { ...t, completionNote, updatedAt: new Date().toISOString() }
-          : t,
-      ),
+      prev.map((t) => {
+        if (t.id === id) {
+          const updated = { ...t, completionNote, updatedAt: new Date().toISOString() };
+          upsertRecord("topics", id, updated);
+          return updated;
+        }
+        return t;
+      }),
     );
     addToast("Topic final status note updated!", "success");
   };
 
   const deleteTopic = (id) => {
     setTopics((prev) => prev.filter((t) => t.id !== id));
+    deleteRecord("topics", id);
+    timetable
+      .filter((t) => t.topicId === id)
+      .forEach((t) => deleteRecord("timetable", t.id));
     setTimetable((prev) => prev.filter((t) => t.topicId !== id));
     addToast("Topic removed", "info");
   };
@@ -476,19 +562,28 @@ export function StudyProvider({ children }) {
       createdAt: courseData.createdAt || new Date().toISOString(),
     };
     setVideoCourses((prev) => [newCourse, ...prev]);
+    upsertRecord("videoCourses", newCourse.id, newCourse);
     addToast(`Video "${newCourse.title}" added!`, "success");
     return newCourse;
   };
 
   const updateVideoCourse = (id, updatedFields) => {
     setVideoCourses((prev) =>
-      prev.map((c) => (c.id === id ? { ...c, ...updatedFields } : c)),
+      prev.map((c) => {
+        if (c.id === id) {
+          const updated = { ...c, ...updatedFields };
+          upsertRecord("videoCourses", id, updated);
+          return updated;
+        }
+        return c;
+      }),
     );
     addToast("Video course updated", "success");
   };
 
   const deleteVideoCourse = (id) => {
     setVideoCourses((prev) => prev.filter((c) => c.id !== id));
+    deleteRecord("videoCourses", id);
     addToast("Video course removed", "info");
   };
 
@@ -505,23 +600,28 @@ export function StudyProvider({ children }) {
       updatedAt: new Date().toISOString(),
     };
     setTimetable((prev) => [...prev, newSlot]);
+    upsertRecord("timetable", newSlot.id, newSlot);
     addToast("Timetable slot added", "success");
     return newSlot;
   };
 
   const updateTimetableSlot = (id, updatedFields) => {
     setTimetable((prev) =>
-      prev.map((slot) =>
-        slot.id === id
-          ? { ...slot, ...updatedFields, updatedAt: new Date().toISOString() }
-          : slot,
-      ),
+      prev.map((slot) => {
+        if (slot.id === id) {
+          const updated = { ...slot, ...updatedFields, updatedAt: new Date().toISOString() };
+          upsertRecord("timetable", id, updated);
+          return updated;
+        }
+        return slot;
+      }),
     );
     addToast("Timetable updated", "success");
   };
 
   const deleteTimetableSlot = (id) => {
     setTimetable((prev) => prev.filter((slot) => slot.id !== id));
+    deleteRecord("timetable", id);
     addToast("Timetable slot removed", "info");
   };
 
@@ -537,6 +637,7 @@ export function StudyProvider({ children }) {
       updatedAt: new Date().toISOString(),
     };
     setTimetable((prev) => [...prev, duplicated]);
+    upsertRecord("timetable", duplicated.id, duplicated);
     addToast(`Timetable duplicated to ${duplicated.day}`, "success");
   };
 
@@ -566,6 +667,7 @@ export function StudyProvider({ children }) {
       updatedAt: new Date().toISOString(),
     }));
     setTimetable((prev) => [...prev, ...newSlots]);
+    newSlots.forEach((slot) => upsertRecord("timetable", slot.id, slot));
     addToast(`Added recurring plan for ${daysList.length} days!`, "success");
   };
 
@@ -582,6 +684,7 @@ export function StudyProvider({ children }) {
     };
     const updatedSessions = [newSession, ...sessions];
     setSessions(updatedSessions);
+    upsertRecord("sessions", newSession.id, newSession);
 
     // Auto-evaluate attendance for this session's date
     const autoAtt = evaluateAutoAttendance({
@@ -607,6 +710,7 @@ export function StudyProvider({ children }) {
       }
       return [...prev, attRecordWithUser];
     });
+    upsertRecord("attendance", autoAtt.date, attRecordWithUser);
 
     addToast("Study session saved successfully!", "success");
     return newSession;
@@ -615,14 +719,20 @@ export function StudyProvider({ children }) {
   const deleteSession = (id) => {
     const remaining = sessions.filter((s) => s.id !== id);
     setSessions(remaining);
+    deleteRecord("sessions", id);
     addToast("Session deleted", "info");
   };
 
   const updateSession = (id, updatedFields) => {
     setSessions((prev) =>
-      prev.map((s) =>
-        s.id === id ? { ...s, ...updatedFields, updatedAt: new Date().toISOString() } : s
-      )
+      prev.map((s) => {
+        if (s.id === id) {
+          const updated = { ...s, ...updatedFields, updatedAt: new Date().toISOString() };
+          upsertRecord("sessions", id, updated);
+          return updated;
+        }
+        return s;
+      }),
     );
     addToast("Session updated successfully", "success");
   };
@@ -643,6 +753,7 @@ export function StudyProvider({ children }) {
         manual: true,
         updatedAt: new Date().toISOString(),
       };
+      upsertRecord("attendance", record.id, record);
       if (existingIdx >= 0) {
         const copy = [...prev];
         copy[existingIdx] = record;
@@ -654,20 +765,23 @@ export function StudyProvider({ children }) {
   };
 
   // ----------------------------------------------------
-  // TARGETS
+  // TARGETS & TODOS
   // ----------------------------------------------------
   const updateDailyTarget = (dailyTarget) => {
     setTargets((prev) => ({ ...prev, daily: dailyTarget }));
+    upsertRecord("targets", "daily", { daily: dailyTarget });
     addToast("Daily target updated", "success");
   };
 
   const updateWeeklyTarget = (weeklyTarget) => {
     setTargets((prev) => ({ ...prev, weekly: weeklyTarget }));
+    upsertRecord("targets", "weekly", { weekly: weeklyTarget });
     addToast("Weekly target updated", "success");
   };
 
   const updateMonthlyTarget = (monthlyTarget) => {
     setTargets((prev) => ({ ...prev, monthly: monthlyTarget }));
+    upsertRecord("targets", "monthly", { monthly: monthlyTarget });
     addToast("Monthly target updated", "success");
   };
 
@@ -685,66 +799,79 @@ export function StudyProvider({ children }) {
       ...prev,
       tomorrow: [...(prev.tomorrow || []), item],
     }));
+    upsertRecord("todos", item.id, item);
     addToast("Target added", "success");
   };
 
   const updateTomorrowTarget = (id, updatedFields) => {
-    setTargets((prev) => ({
-      ...prev,
-      tomorrow: (prev.tomorrow || []).map((t) =>
-        t.id === id
-          ? { ...t, ...updatedFields, updatedAt: new Date().toISOString() }
-          : t,
-      ),
-    }));
+    setTargets((prev) => {
+      const updatedList = (prev.tomorrow || []).map((t) => {
+        if (t.id === id) {
+          const updated = { ...t, ...updatedFields, updatedAt: new Date().toISOString() };
+          upsertRecord("todos", id, updated);
+          return updated;
+        }
+        return t;
+      });
+      return { ...prev, tomorrow: updatedList };
+    });
     addToast("Target updated", "success");
   };
 
   const completeTomorrowTarget = (id, completionNote = "") => {
-    setTargets((prev) => ({
-      ...prev,
-      tomorrow: (prev.tomorrow || []).map((t) =>
-        t.id === id
-          ? {
-              ...t,
-              completed: true,
-              status: "Completed",
-              completionNote,
-              completedAt: new Date().toISOString(),
-              updatedAt: new Date().toISOString(),
-            }
-          : t,
-      ),
-    }));
+    setTargets((prev) => {
+      const updatedList = (prev.tomorrow || []).map((t) => {
+        if (t.id === id) {
+          const updated = {
+            ...t,
+            completed: true,
+            status: "Completed",
+            completionNote,
+            completedAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          };
+          upsertRecord("todos", id, updated);
+          return updated;
+        }
+        return t;
+      });
+      return { ...prev, tomorrow: updatedList };
+    });
     addToast("Task completed! 🎉", "success");
   };
 
   const reopenTomorrowTarget = (id) => {
-    setTargets((prev) => ({
-      ...prev,
-      tomorrow: (prev.tomorrow || []).map((t) =>
-        t.id === id
-          ? {
-              ...t,
-              completed: false,
-              status: "Pending",
-              updatedAt: new Date().toISOString(),
-            }
-          : t,
-      ),
-    }));
+    setTargets((prev) => {
+      const updatedList = (prev.tomorrow || []).map((t) => {
+        if (t.id === id) {
+          const updated = {
+            ...t,
+            completed: false,
+            status: "Pending",
+            updatedAt: new Date().toISOString(),
+          };
+          upsertRecord("todos", id, updated);
+          return updated;
+        }
+        return t;
+      });
+      return { ...prev, tomorrow: updatedList };
+    });
     addToast("Task reopened", "info");
   };
 
   const updateTomorrowTargetNote = (id, completionNote) => {
-    setTargets((prev) => ({
-      ...prev,
-      tomorrow: (prev.tomorrow || []).map((t) =>
-        t.id === id
-          ? { ...t, completionNote, updatedAt: new Date().toISOString() }
-          : t,
-      ),
-    }));
+    setTargets((prev) => {
+      const updatedList = (prev.tomorrow || []).map((t) => {
+        if (t.id === id) {
+          const updated = { ...t, completionNote, updatedAt: new Date().toISOString() };
+          upsertRecord("todos", id, updated);
+          return updated;
+        }
+        return t;
+      });
+      return { ...prev, tomorrow: updatedList };
+    });
     addToast("Task status note updated!", "success");
   };
 
@@ -753,6 +880,7 @@ export function StudyProvider({ children }) {
       ...prev,
       tomorrow: (prev.tomorrow || []).filter((t) => t.id !== id),
     }));
+    deleteRecord("todos", id);
     addToast("Target removed", "info");
   };
 
@@ -841,23 +969,28 @@ export function StudyProvider({ children }) {
       updatedAt: new Date().toISOString(),
     };
     setGoals((prev) => [...prev, newGoal]);
+    upsertRecord("goals", newGoal.id, newGoal);
     addToast(`Goal "${newGoal.name}" created!`, "success");
     return newGoal;
   };
 
   const updateGoal = (id, updatedFields) => {
     setGoals((prev) =>
-      prev.map((g) =>
-        g.id === id
-          ? { ...g, ...updatedFields, updatedAt: new Date().toISOString() }
-          : g,
-      ),
+      prev.map((g) => {
+        if (g.id === id) {
+          const updated = { ...g, ...updatedFields, updatedAt: new Date().toISOString() };
+          upsertRecord("goals", id, updated);
+          return updated;
+        }
+        return g;
+      }),
     );
     addToast("Goal updated", "success");
   };
 
   const deleteGoal = (id) => {
     setGoals((prev) => prev.filter((g) => g.id !== id));
+    deleteRecord("goals", id);
     addToast("Goal removed", "info");
   };
 
@@ -875,13 +1008,15 @@ export function StudyProvider({ children }) {
         const progress =
           total > 0 ? Math.round((completedCount / total) * 100) : g.progress;
         const status = progress === 100 ? "Completed" : "In Progress";
-        return {
+        const updatedGoal = {
           ...g,
           milestones: updatedMilestones,
           progress,
           status,
           updatedAt: new Date().toISOString(),
         };
+        upsertRecord("goals", goalId, updatedGoal);
+        return updatedGoal;
       }),
     );
   };
@@ -890,8 +1025,78 @@ export function StudyProvider({ children }) {
   // SETTINGS
   // ----------------------------------------------------
   const updateSettings = (newSettings) => {
-    setSettings((prev) => ({ ...prev, ...newSettings }));
+    setSettings((prev) => {
+      const merged = { ...prev, ...newSettings };
+      upsertRecord("settings", "app-settings", merged);
+      return merged;
+    });
     addToast("Settings saved", "success");
+  };
+
+  // ----------------------------------------------------
+  // UNIVERSAL TWO-WAY RESTORE & SYNC
+  // ----------------------------------------------------
+  const restoreFromGoogleSheets = async (showToast = true) => {
+    try {
+      if (showToast) addToast("Loading records from Google Sheets...", "info");
+      const res = await getAllRecords();
+      if (!res || !res.records) {
+        throw new Error("No records returned from Google Sheets backend.");
+      }
+
+      const records = res.records;
+      const grouped = {};
+      records.forEach((r) => {
+        const sName = r.sheetName || "misc";
+        if (!grouped[sName]) grouped[sName] = [];
+        let parsedData = r.data;
+        if (typeof parsedData === "string") {
+          try {
+            parsedData = JSON.parse(parsedData);
+          } catch (e) {
+            parsedData = { raw: parsedData };
+          }
+        }
+        grouped[sName].push(parsedData);
+      });
+
+      if (grouped.preparations && grouped.preparations.length > 0) {
+        setPreparations(grouped.preparations);
+        if (!activePrepId || !grouped.preparations.some((p) => p.id === activePrepId)) {
+          setActivePrepId(grouped.preparations[0].id);
+        }
+      }
+      if (grouped.subjects && grouped.subjects.length > 0) {
+        setSubjects(grouped.subjects);
+      }
+      if (grouped.topics && grouped.topics.length > 0) {
+        setTopics(grouped.topics);
+      }
+      if (grouped.timetable && grouped.timetable.length > 0) {
+        setTimetable(grouped.timetable);
+      }
+      if (grouped.sessions && grouped.sessions.length > 0) {
+        setSessions(grouped.sessions);
+      }
+      if (grouped.attendance && grouped.attendance.length > 0) {
+        setAttendance(grouped.attendance);
+      }
+      if (grouped.goals && grouped.goals.length > 0) {
+        setGoals(grouped.goals);
+      }
+      if (grouped.todos && grouped.todos.length > 0) {
+        setTargets((prev) => ({ ...prev, tomorrow: grouped.todos }));
+      }
+
+      const totalCount = records.length;
+      if (showToast) {
+        addToast(`Restored ${totalCount} records from Google Sheets! 🎉`, "success");
+      }
+      return { success: true, count: totalCount };
+    } catch (err) {
+      if (showToast) addToast(`Failed to restore: ${err.message}`, "error");
+      return { success: false, error: err.message };
+    }
   };
 
   const syncNow = async () => {
@@ -903,6 +1108,13 @@ export function StudyProvider({ children }) {
 
     setSyncStatus((prev) => ({ ...prev, isSyncing: true, error: "" }));
     try {
+      // First flush outbox queue if any pending changes exist
+      try {
+        await syncPendingChanges();
+      } catch (e) {
+        console.warn("Outbox queue sync partial:", e.message);
+      }
+
       const result = await syncToGoogleSheets({
         data: {
           preparations,
@@ -925,6 +1137,8 @@ export function StudyProvider({ children }) {
         lastSyncedAt: new Date().toISOString(),
         error: "",
         rowCount: result.rowCount,
+        spreadsheetUrl: result.spreadsheetUrl,
+        downloadUrl: result.downloadUrl,
       });
       addToast(result.message, "success");
       return result;
@@ -938,6 +1152,11 @@ export function StudyProvider({ children }) {
       addToast(error.message, "error");
       throw error;
     }
+  };
+
+  const testGoogleSheets = async (customUrl) => {
+    const targetUrl = customUrl || settings.googleSheetsSyncUrl || DEFAULT_SYNC_URL;
+    return await testGoogleSheetsConnection(targetUrl);
   };
 
   // ----------------------------------------------------
@@ -1055,6 +1274,11 @@ export function StudyProvider({ children }) {
     updateSettings,
     syncStatus,
     syncNow,
+    testGoogleSheets,
+    restoreFromGoogleSheets,
+    getPendingOutbox,
+    syncPendingChanges,
+    getSpreadsheetDownloadUrl,
 
     notifications,
     addNotification,
